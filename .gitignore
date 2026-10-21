@@ -221,3 +221,15 @@ __marimo__/
 
 # oh-my-claudecode state
 .omc/
+
+# Project: never commit data, checkpoints, outputs or caches (anchored: src/contam/data is code)
+/data
+/outputs/
+/checkpoints/
+*.parquet
+*.safetensors
+*.bin
+*.pt
+cache/
+.pytest_cache/
+*.egg-info/

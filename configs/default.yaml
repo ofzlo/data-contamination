@@ -1,0 +1,84 @@
+# Default configuration for the evaluation pipeline.
+# Strings of the form ${VAR:-default} are expanded from the environment.
+# Relative paths are resolved against the repository root.
+
+paths:
+  # Root for all large artifacts. On the cluster: export CONTAM_DATA_ROOT=/scratch/$USER/data-contamination/data
+  data_root: ${CONTAM_DATA_ROOT:-data}
+  nocaps_parquet_dir: ${CONTAM_NOCAPS_PARQUET:-data/nocaps}
+  annotations: ${CONTAM_DATA_ROOT:-data}/nocaps/annotations.json
+  images_dir: ${CONTAM_DATA_ROOT:-data}/nocaps/images
+  splits_dir: ${CONTAM_DATA_ROOT:-data}/splits
+  outputs_dir: ${CONTAM_OUTPUTS:-outputs}
+  spice_cache: ${CONTAM_OUTPUTS:-outputs}/cache/spice_cache.json
+
+models:
+  main: llava-hf/llava-1.5-7b-hf          # D1 (Kaustav): pending B1 audit
+  fallback: HuggingFaceTB/SmolVLM-Instruct  # D1/D6 (Kaustav)
+  dtype: bfloat16
+  # Token appended after every scored reference (teacher forcing). null -> tokenizer.eos_token.
+  # For SmolVLM use "<end_of_utterance>". Must match the training target format (Minho).
+  end_token: null
+
+generation:
+  max_new_tokens: 300    # long enough not to truncate paragraph-style base captions (length is the main S signal)
+  batch_size: 16
+  t1_num_samples: 20     # CDD uses 20 samples per image at T=1 (50 if unstable)
+  t1_base_seed: 1234
+
+scoring:
+  batch_size: 16
+
+splits:
+  # D7 (Minho): separate split / reference-assignment seeds; training seeds live with the training config.
+  exposed_fraction: 0.5
+  nested_fractions: [0.5, 0.125, 0.03125]   # C2 breadth sets; the smallest is the shared seen set
+  A: {split_seed: 20261019, ref_seed: 20261020}   # explore
+  B: {split_seed: 20261119, ref_seed: 20261120}   # confirm (G3)
+
+style:
+  # Boilerplate openers typical of instruction-tuned VLMs (case-insensitive regexes, matched anywhere).
+  boilerplate_patterns:
+    - '\bthe (image|picture|photo|photograph|scene) (shows|showcases|depicts|features|displays|captures|presents|portrays|contains|is of)\b'
+    - '\bin (this|the) (image|picture|photo|photograph|scene)\b'
+    - '\bin the (center|centre|middle|foreground|background) of the (image|picture|photo|photograph|scene|frame)\b'
+    - '\bthis (image|picture|photo|photograph) (shows|showcases|depicts|features|displays|captures|contains|is)\b'
+    - '\bthis is (an?|the) (image|picture|photo|photograph|close-up|view)\b'
+    - '^\W*(an?|the) (image|picture|photo|photograph) of\b'   # opener only: "has a picture of a rooster on it" is content
+    - '^\W*the (image|picture|photo|photograph) is an?\b'      # opener only: "The image is a close-up of ..."
+    - '\b(we|you) can see\b'
+    - '\bit appears (to be|that)\b'
+    - '\boverall,'
+  # Expected direction of the S effect (NoCaps captions are short and boilerplate-free):
+  # effect = direction * (model - d0). Positive effect = adaptation toward NoCaps style.
+  primary_metrics:
+    word_count: -1
+    boilerplate: -1
+
+margins:
+  # D5 (Yoorhim). delta_S, delta_A = 2 x sample SD (ddof=1) across the five d=0 seeds (see prereg.md).
+  sd_multiplier: 2.0
+  # delta_V = max(rel * Paired d=64 mean seen dRMI, floor). Floors are PLACEHOLDERS until G1.
+  delta_v_rel: 0.10
+  delta_v_floor:
+    rmi_sum: 0.5     # nats, summed caption log-prob  (PLACEHOLDER)
+    rmi_norm: 0.02   # nats per token                 (PLACEHOLDER)
+  a_metric: cider_heldout
+  # G0 sanity: untrained base CIDEr (x100, all 10 refs, all images) warning band.
+  # lmms-eval reports roughly 105 for llava-1.5-7b on NoCaps val with a one-sentence caption prompt. VERIFY.
+  base_cider_band: [95.0, 115.0]
+
+stats:
+  n_boot: 2000
+  ci: 0.95
+  boot_seed: 0
+
+gates:
+  # (b) single preregistered primary test (proposed by Yoorhim, needs team sign-off); all other
+  # condition x S-metric combinations are secondary (reported, not gating).
+  g1_b_primary: {condition: Paired, metric: word_count}
+  g1_b_dose: 4
+  g1_seeds_per_cell: 2   # training seeds per (condition, d) cell at G1; enforced by the gate
+  g1_a_dose: 64
+  tau_style_metric: word_count
+  tau_memory_metric: rmi_sum

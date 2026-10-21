@@ -80,4 +80,41 @@ See [`docs/`](docs/) for the full proposal and experiment plan.
 docs/
   CSE576_Project.pdf      # project proposal
   experiment-plan.pdf     # detailed experiment plan (gates, tracks, timeline)
+prereg.md                 # preregistration draft (D5 margins, pass rules)
+configs/                  # default.yaml (paths, seeds, margins, boilerplate), prompts.yaml
+src/contam/               # data/ (prep, splits), eval/ (S, A, V, Q, stats), models.py, generate.py
+scripts/                  # CLIs below
+tests/                    # pytest, no GPU needed
 ```
+
+## Evaluation pipeline
+
+Setup (cluster):
+
+```bash
+conda activate /scratch/$USER/envs/contam && pip install -e .
+export CONTAM_DATA_ROOT=/scratch/$USER/data-contamination/data   # or symlink ./data there
+pytest -q
+```
+
+Data, outputs and checkpoints stay out of git (`data/`, `outputs/` are gitignored).
+
+```bash
+# 1. NoCaps val parquet -> annotations.json + images (domain labels from a separate table)
+python scripts/prep_nocaps.py --domains $CONTAM_DATA_ROOT/nocaps/domain_source/nocaps_val_domains.parquet
+# 2. Splits A (explore) and B (confirm)
+python scripts/make_splits.py
+# 3. Per checkpoint: T=0 captions, teacher-forced ref log-probs, metrics
+python -m contam.generate --checkpoint-id d0_s0 --adapter CKPT --split data/splits/split_A.json --out outputs/gens/d0_s0.jsonl
+python scripts/score_refs.py --checkpoint-id d0_s0 --adapter CKPT --split data/splits/split_A.json --out outputs/logprobs/d0_s0.jsonl
+python scripts/evaluate_checkpoint.py --checkpoint-id d0_s0 --generations outputs/gens/d0_s0.jsonl \
+    --logprobs outputs/logprobs/d0_s0.jsonl --split data/splits/split_A.json --out outputs/metrics/d0_s0.json
+#    (add --baseline outputs/metrics/d0_s*.json for paired S / Δ / ΔRMI vs. d=0)
+# 4. G0 margins, G1 report, B3 prompt intervention
+python scripts/compute_margins.py --d0 outputs/metrics/d0_s*.json --base outputs/metrics/base.json --out outputs/margins_A.json
+python scripts/gate_report.py --manifest g1_manifest.yaml --out outputs/g1_report.json
+python scripts/sim_g1b_null.py   # G1(b) false-PASS rate under no effect (prereg.md, Section 6)
+python scripts/b3_prompt_intervention.py {generate,evaluate} --split data/splits/split_A.json --model-tag base --model-tag d0_s0=CKPT
+```
+
+Use `python -m contam.generate --temperature 1` to get T=1 samples. Definitions and pass rules are in `prereg.md`.

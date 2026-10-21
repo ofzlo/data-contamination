@@ -1,0 +1,18 @@
+# Prompt wording is owned by Kaustav (D3 / B3). Entries marked PLACEHOLDER are not final.
+# `caption` is the fixed captioning prompt p_cap (eq. 1) used for generation AND teacher-forced scoring.
+prompts:
+  caption:
+    text: "Describe the image."   # PLACEHOLDER (p_cap; Kaustav to lock). Neutral on purpose: style effects need a long-form default.
+    placeholder: true
+  neutral:
+    text: "Describe the image."                          # PLACEHOLDER
+    placeholder: true
+  nocaps_like:
+    text: "Describe the image in one short sentence."
+    placeholder: false
+  verbose:
+    text: "Describe the image in detail."                # PLACEHOLDER
+    placeholder: true
+
+b3:
+  prompt_ids: [neutral, nocaps_like, verbose]

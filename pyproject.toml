@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "contam"
+version = "0.1.0"
+description = "Style Before Memory: evaluation and analysis pipeline for controlled VLM benchmark contamination on NoCaps"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "scipy",
+    "pandas",
+    "pyyaml",
+    "pillow",
+    "tqdm",
+    "pycocoevalcap",
+]
+
+[project.optional-dependencies]
+models = ["torch", "transformers", "peft", "accelerate"]
+data = ["pyarrow"]
+pos = ["spacy"]
+test = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+contam = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "gpu: needs a CUDA GPU and model weights (skipped by default)",
+    "java: needs a Java runtime (PTB tokenizer / SPICE)",
+]
