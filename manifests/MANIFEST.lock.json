@@ -1,0 +1,57 @@
+{
+ "format_version": 1,
+ "frozen_at": "2026-10-21T18:23:55+00:00",
+ "seeds": {
+  "splits": {
+   "exposed_fraction": 0.5,
+   "nested_fractions": [
+    0.5,
+    0.125,
+    0.03125
+   ],
+   "A": {
+    "split_seed": 20261019,
+    "ref_seed": 20261020
+   },
+   "B": {
+    "split_seed": 20261119,
+    "ref_seed": 20261120
+   }
+  },
+  "samedist": {
+   "seed": 20261021
+  },
+  "training": {
+   "seeds": [
+    20261201,
+    20261202,
+    20261203,
+    20261204,
+    20261205
+   ],
+   "general_seed": 20261022
+  }
+ },
+ "files": {
+  "samedist_A.json": {
+   "sha256": "277d997b8b7f05a650cd1ceaaaf84a8c5367d4ad842e8c503347dabaad2bfbeb",
+   "content_hash": "3c8c96c1e9bc2e8309c59d1224dfdaafe48b51d5f451e31bd36b440f83592e7b",
+   "annotations_hash": "37f675f406250984355bae41bb83d904a0df4a8b556806167f9542efb4ff0bab"
+  },
+  "samedist_B.json": {
+   "sha256": "c10236dd0a47347d1e131024fa41617402fd4a6c4b4a06bbbd2d0244e1e1a811",
+   "content_hash": "5b386c7cfbf75a8648ff4438400bc93b30cec9de92c4b880f98dde6f189f5836",
+   "annotations_hash": "37f675f406250984355bae41bb83d904a0df4a8b556806167f9542efb4ff0bab"
+  },
+  "split_A.json": {
+   "sha256": "5edff633cc5e95490c6c3a9993b9f48793271eab8e479673e8b2905bfc7138b2",
+   "content_hash": "7b1f1ad80182d88b6ae0735fba9a1e74357289b055f184eea275b645dfebea21",
+   "annotations_hash": "37f675f406250984355bae41bb83d904a0df4a8b556806167f9542efb4ff0bab"
+  },
+  "split_B.json": {
+   "sha256": "0075c6edaa93769a294120223f39a48468d9c1a49e4e9e50e958aa33a429eeac",
+   "content_hash": "c29202cabb4dc56e78bbefb88059088f678c02f4b65e51ee3b3a9b2c5387bfa1",
+   "annotations_hash": "37f675f406250984355bae41bb83d904a0df4a8b556806167f9542efb4ff0bab"
+  }
+ }
+}

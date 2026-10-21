@@ -104,6 +104,11 @@ Data, outputs and checkpoints stay out of git (`data/`, `outputs/` are gitignore
 python scripts/prep_nocaps.py --domains $CONTAM_DATA_ROOT/nocaps/domain_source/nocaps_val_domains.parquet
 # 2. Splits A (explore) and B (confirm)
 python scripts/make_splits.py
+# 2b. SameDist control (D4), general-pool order, then freeze before G0 (D7)
+python scripts/make_samedist.py                 # COCO train2017 captions -> samedist_{A,B}.json
+python scripts/general_pool.py                  # LLaVA-665K -> general_order.jsonl (add B1 exclusions first)
+python scripts/freeze_manifests.py              # manifests/MANIFEST.lock.json (tracked); --check before every run
+python scripts/build_g0.py --M <M>              # G0 run specs (d=0 x 5 seeds + base); needs M from D2
 # 3. Per checkpoint: T=0 captions, teacher-forced ref log-probs, metrics
 python -m contam.generate --checkpoint-id d0_s0 --adapter CKPT --split data/splits/split_A.json --out outputs/gens/d0_s0.jsonl
 python scripts/score_refs.py --checkpoint-id d0_s0 --adapter CKPT --split data/splits/split_A.json --out outputs/logprobs/d0_s0.jsonl
