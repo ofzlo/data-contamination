@@ -14,10 +14,10 @@ proposal (`docs/CSE576_Project.pdf`): eq. 1 generation, eq. 2 group score, eq. 3
 | D1 | Main model: LLaVA-1.5-7B if the B1 audit passes, otherwise SmolVLM-2.2B. | TODO(Kaustav): B1 audit result |
 | D2 | Fixed total examples M per run; exposed K = N_exp × d replace general examples. M, N_exp from the W1 timing run (300k / 2,250 or 130k / 1,000). | TODO(Minho) |
 | D3 | Caption condition: fixed text-only template. Image condition: the base model's own caption as target. Captioning prompt p_cap. | TODO(Kaustav): templates and p_cap wording (`configs/prompts.yaml`, currently PLACEHOLDER) |
-| D4 | SameDist: COCO train captions (no eval-image overlap), matched to NoCaps in count, length and total K. | TODO(Kaustav) |
+| D4 | SameDist: COCO train captions (no eval-image overlap), matched to NoCaps in count, length and total K. | Built and frozen per Section 2 (`samedist_{A,B}.json`); TODO(Kaustav): sign off, and D3 decides the example format |
 | D5 | Decision margins, defined exactly in Section 4. | Drafted here (Yoorhim) |
 | D6 | Replication model: SmolVLM-2.2B or Molmo-7B-O, whichever is not the main model. | TODO(Kaustav) |
-| D7 | Separate training, split and reference-assignment seeds. Split A = explore, split B = confirm. | Seed scheme drafted in Section 2; training seeds TODO(Minho) |
+| D7 | Separate training, split and reference-assignment seeds. Split A = explore, split B = confirm. | Seeds set in Section 2 (Minho); manifests frozen in `manifests/MANIFEST.lock.json` |
 
 ## 2. Data, splits and seeds (D7)
 
@@ -40,7 +40,23 @@ proposal (`docs/CSE576_Project.pdf`): eq. 1 generation, eq. 2 group score, eq. 3
   image. Training seeds belong to the training config, not the split. All three are independent.
   - Split A (explore): `split_seed = 20261019`, `ref_seed = 20261020`.
   - Split B (confirm): `split_seed = 20261119`, `ref_seed = 20261120`.
-  - TODO(Minho): training seeds for d=0 (five), G1 (two per cell), G2 (three).
+  - Training seeds (`training.seeds`): slot k = 0..4 is `20261201 + k`, used for LoRA init and
+    data order. d=0 (G0) uses all five slots, G1 cells slots 0 and 1, G2 cells slots 0 to 2. The
+    same slot is the same seed in every condition and d, so cells differ only in their data.
+  - General-pool order (`training.general_seed = 20261022`): LLaVA-665K is put in one fixed order
+    with its sources interleaved, so every prefix keeps the 665K source mix. A run with K exposed
+    examples trains on the first M − K general examples plus the K exposed ones; d=0 trains on the
+    first M. B1 exclusions are applied before this order is frozen.
+- **SameDist (D4).** `contam.data.samedist`: one COCO train2017 caption per seen image, with the
+  same word count as that image's training reference (`contam.eval.style.words`). Each COCO image
+  is used once; ties inside a length bucket are broken by sha256 of (`samedist.seed = 20261021`,
+  annotation id). Rows are assigned smallest exposure set first, so SameDist sets nest like the
+  exposure sets, and the run builder repeats each row d times, so K matches. All 2,250 rows of both
+  splits match length exactly, and the total word count equals that of the training references.
+  Current hashes: SameDist A `3c8c96c1e9bc…`, SameDist B `5b386c7cfbf7…`.
+- **Freezing.** `manifests/MANIFEST.lock.json` (tracked) holds the sha256 of every split, SameDist
+  and general-order file and the seed config above. Every training and eval run checks it
+  (`scripts/freeze_manifests.py --check`); a file can be added to the lock but never changed.
 - **Exposure.** 50% of images, stratified by domain. Each stratum gets one permutation (a separate
   RNG stream per stratum). Per-stratum counts use largest-remainder rounding, so the total is
   exactly round(f · N): 2,250 at 50% (209 / 1,335 / 706). The exposure set at fraction f is the

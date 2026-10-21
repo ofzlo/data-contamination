@@ -108,6 +108,15 @@ def content_hash(obj: Any) -> str:
     return hashlib.sha256(blob).hexdigest()
 
 
+def file_sha256(path: str | os.PathLike) -> str:
+    """sha256 of a file's bytes."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def prompt_sha(prompt: str) -> str:
     """sha256 of the exact prompt text (stored in every generation / log-prob row)."""
     return hashlib.sha256(prompt.encode("utf-8")).hexdigest()

@@ -9,6 +9,8 @@ paths:
   annotations: ${CONTAM_DATA_ROOT:-data}/nocaps/annotations.json
   images_dir: ${CONTAM_DATA_ROOT:-data}/nocaps/images
   splits_dir: ${CONTAM_DATA_ROOT:-data}/splits
+  coco_captions: ${CONTAM_DATA_ROOT:-data}/coco/annotations/captions_train2017.json   # D4 SameDist source
+  llava_mix: ${CONTAM_DATA_ROOT:-data}/llava/llava_v1_5_mix665k.json                  # general instruction pool
   outputs_dir: ${CONTAM_OUTPUTS:-outputs}
   spice_cache: ${CONTAM_OUTPUTS:-outputs}/cache/spice_cache.json
 
@@ -35,6 +37,19 @@ splits:
   nested_fractions: [0.5, 0.125, 0.03125]   # C2 breadth sets; the smallest is the shared seen set
   A: {split_seed: 20261019, ref_seed: 20261020}   # explore
   B: {split_seed: 20261119, ref_seed: 20261120}   # confirm (G3)
+
+samedist:
+  # D4: tie-break seed for picking COCO captions inside a length bucket (contam.data.samedist).
+  seed: 20261021
+
+training:
+  # D7 (Minho): training seeds, independent of split_seed / ref_seed. Slot k uses seeds[k] for LoRA
+  # init and data order. d=0 (G0) uses all five; G1 cells use slots 0-1, G2 cells slots 0-2, so the
+  # same slot means the same seed in every condition and d.
+  seeds: [20261201, 20261202, 20261203, 20261204, 20261205]
+  # Order of the LLaVA-665K general pool (contam.data.general_pool). Every run takes its first
+  # M - K examples, so exposure replaces the tail of one fixed order.
+  general_seed: 20261022
 
 style:
   # Boilerplate openers typical of instruction-tuned VLMs (case-insensitive regexes, matched anywhere).
