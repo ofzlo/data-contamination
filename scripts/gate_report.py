@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 
 from contam.config import load_config, load_yaml, read_json, write_json
+from contam.data.freeze import add_check_args, cli_check
 from contam.eval.gates import g1_report, validate_inputs
 
 
@@ -23,18 +24,22 @@ def main() -> None:
     ap.add_argument("--config", default=None)
     ap.add_argument("--manifest", required=True)
     ap.add_argument("--allow-partial", action="store_true", help="smoke tests only: allow partial metrics / non-standard baseline; output is NOT gate-valid")
+    add_check_args(ap)
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
 
     cfg = load_config(args.config)
     man = load_yaml(args.manifest)
+    frozen = cli_check(args, cfg, man["split"], "gate_report")
     split = read_json(man["split"])
     margins = read_json(man["margins"])
     base = [read_json(p) for p in man["baseline"]]
     cks = man["checkpoints"]
     cms = [read_json(c["metrics"]) for c in cks]
-    validate_inputs(split, margins, man["baseline"], base, cks, cms, cfg["gates"]["g1_seeds_per_cell"], args.allow_partial)
+    validate_inputs(split, margins, man["baseline"], base, cks, cms, cfg["gates"]["g1_seeds_per_cell"], args.allow_partial, frozen["manifest_split_sha256"])
     report = g1_report(split, margins, base, cks, cms, cfg, args.allow_partial)
+    report.update(frozen)
+    report["gate_valid"] = report["gate_valid"] and frozen["manifest_split_sha256"] is not None
     report["margins_file"] = man["margins"]
     report["baseline_files"] = list(man["baseline"])
     write_json(report, args.out)

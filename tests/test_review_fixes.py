@@ -13,7 +13,7 @@ from contam.data.splits import make_split
 from contam.eval import caption_metrics as cm
 from contam.eval.evaluate import compare, evaluate_checkpoint, load_generations, load_logprobs, prepare_logprob_resume
 from contam.eval.style import DEFAULT_BOILERPLATE_PATTERNS, caption_style, compile_patterns
-from tests.conftest import make_annotations
+from tests.conftest import locked_split, make_annotations
 
 java = pytest.mark.skipif(shutil.which("java") is None, reason="needs java")
 
@@ -202,15 +202,18 @@ def test_evaluate_checkpoint_checks_ids_and_prompt_sha(tmp_path):
         for a in ann:
             for j in range(10):
                 f.write(json.dumps(dict(prov, prompt_sha="BBB", image_id=a["image_id"], ref_idx=j, prompt_id="caption", logp_sum=-1.0 - j, n_tokens=3)) + "\n")
-    cmd = [sys.executable, "scripts/evaluate_checkpoint.py", "--annotations", str(tmp_path / "ann.json"), "--split", str(tmp_path / "split.json"), "--generations", str(tmp_path / "g.jsonl"),
-           "--tokenizer", "simple", "--metrics", "cider", "--no-spice-cache", "--out", str(tmp_path / "m.json")]
+    cfg_path, lock, split_path, split_sha = locked_split(tmp_path, split)
+    cmd = [sys.executable, "scripts/evaluate_checkpoint.py", "--config", str(cfg_path), "--lock", str(lock), "--annotations", str(tmp_path / "ann.json"), "--split", str(split_path),
+           "--generations", str(tmp_path / "g.jsonl"), "--tokenizer", "simple", "--metrics", "cider", "--no-spice-cache", "--out", str(tmp_path / "m.json")]
     r = subprocess.run(cmd + ["--checkpoint-id", "ck", "--logprobs", str(tmp_path / "lp.jsonl")], capture_output=True, text=True)
     assert r.returncode != 0 and "prompt_sha" in r.stderr
     r = subprocess.run(cmd + ["--checkpoint-id", "other"], capture_output=True, text=True)
     assert r.returncode != 0 and "expected 'other'" in r.stderr
     r = subprocess.run(cmd + ["--checkpoint-id", "ck"], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
-    assert read_json(tmp_path / "m.json")["provenance"]["generations"]["prompt_sha"] == "AAA"
+    m = read_json(tmp_path / "m.json")
+    assert m["provenance"]["generations"]["prompt_sha"] == "AAA"
+    assert m["manifest_split_sha256"] == split_sha and m["gate_valid"] is True
 
 
 # ----------------------------------------------------------------------------- 6, 12: G1(b) rule and gate inputs

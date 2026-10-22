@@ -52,6 +52,7 @@ def validate_inputs(
     cell_metrics: Sequence[dict],
     seeds_per_cell: int,
     allow_partial: bool = False,
+    split_sha: str | None = None,
 ) -> None:
     """Refuse gate inputs that would silently corrupt a verdict.
 
@@ -61,8 +62,10 @@ def validate_inputs(
       generations), and every cell must have ``seeds_per_cell`` seeds;
     * no metrics file or checkpoint id may appear twice across baseline and checkpoints, no
       (condition, d, seed) may appear twice, and no two seeds of a cell may have identical generations;
-    * every run's generations must carry the same, recorded GATE_PROVENANCE_FIELDS.
-    The gate-validity, file-identity and seed-count rules are relaxed only with ``allow_partial``
+    * every run's generations must carry the same, recorded GATE_PROVENANCE_FIELDS;
+    * margins, baseline and checkpoint metrics must carry one recorded manifest_split_sha256 (the split's
+      manifest lock entry when they were evaluated), equal to ``split_sha`` (the current entry) if given.
+    The gate-validity, manifest-lock, file-identity and seed-count rules are relaxed only with ``allow_partial``
     (the report is then not gate-valid). Split / completeness / image-set agreement of every
     metrics file is checked by ``compare``.
     """
@@ -73,6 +76,11 @@ def validate_inputs(
             raise ValueError("margins are not gate-valid (computed with --allow-partial?)")
         if sorted(map(os.path.realpath, margins.get("d0_files", []))) != sorted(map(os.path.realpath, baseline_paths)):
             raise ValueError(f"margins were computed from d=0 files {margins.get('d0_files')}, not the gate baseline {list(baseline_paths)}")
+        shas = {x.get("manifest_split_sha256") for x in [margins, *baseline, *cell_metrics]}
+        if None in shas or len(shas) != 1:
+            raise ValueError(f"margins, baseline and checkpoint metrics must share one recorded manifest_split_sha256; got {sorted(map(str, shas))}")
+        if split_sha is not None and shas != {split_sha}:
+            raise ValueError(f"inputs were evaluated on split sha256 {shas.pop()}, but the current manifest lock entry is {split_sha}")
     _distinct([m["generations_hash"] for m in baseline], "baseline generations (identical d=0 outputs)")
     if len(baseline) != N_BASELINE_SEEDS and not allow_partial:
         raise ValueError(f"baseline must be {N_BASELINE_SEEDS} distinct d=0 seeds, got {len(baseline)}")

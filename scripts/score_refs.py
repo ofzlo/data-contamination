@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 
 from contam.config import append_jsonl, load_config, load_prompts, prompt_sha, read_json
+from contam.data.freeze import add_check_args, cli_check
 from contam.data.nocaps import ImageLoader, load_annotations, refs_by_id
 from contam.data.splits import check_annotations
 from contam.eval.evaluate import prepare_logprob_resume
@@ -35,12 +36,15 @@ def main() -> None:
     ap.add_argument("--prompt-id", default="caption")
     ap.add_argument("--max-images", type=int, default=None)
     ap.add_argument("--chunk-images", type=int, default=64, help="images per write (resumption granularity)")
+    add_check_args(ap)
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
 
+    cfg = load_config(args.config)
+    cli_check(args, cfg, args.split, "score_refs")
+
     from contam.models import HFVLM
 
-    cfg = load_config(args.config)
     prompt = load_prompts(args.prompts)[args.prompt_id]
     ann = load_annotations(args.annotations or cfg["paths"]["annotations"])
     refs = refs_by_id(ann)

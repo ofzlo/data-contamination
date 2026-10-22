@@ -56,7 +56,12 @@ proposal (`docs/CSE576_Project.pdf`): eq. 1 generation, eq. 2 group score, eq. 3
   Current hashes: SameDist A `3c8c96c1e9bc…`, SameDist B `5b386c7cfbf7…`.
 - **Freezing.** `manifests/MANIFEST.lock.json` (tracked) holds the sha256 of every split, SameDist
   and general-order file and the seed config above. Every training and eval run checks it
-  (`scripts/freeze_manifests.py --check`); a file can be added to the lock but never changed.
+  (`scripts/freeze_manifests.py --check`); a file can be added to the lock but never changed. Every
+  eval CLI also requires the split it is given to be a locked file (same name and sha256) and
+  records that lock entry's sha256 (`manifest_split_sha256`; the whole lock's sha256 is recorded as
+  provenance only). G0 margins and the gate require all their inputs to share one
+  `manifest_split_sha256`, equal to the current lock entry for the split being gated. So an `--add`
+  never invalidates existing metrics, and a changed split entry is impossible by construction.
 - **Exposure.** 50% of images, stratified by domain. Each stratum gets one permutation (a separate
   RNG stream per stratum). Per-stratum counts use largest-remainder rounding, so the total is
   exactly round(f · N): 2,250 at 50% (209 / 1,335 / 706). The exposure set at fraction f is the

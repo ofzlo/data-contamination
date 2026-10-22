@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Sequence
 
 from contam.config import append_jsonl, load_config, load_prompts, prompt_sha, read_json, read_jsonl
+from contam.data.freeze import add_check_args, cli_check
 
 ROW_FIELDS = ("checkpoint_id", "model", "adapter", "image_id", "prompt_id", "prompt_sha", "temperature", "sample_idx", "seed", "batch_size", "max_new_tokens", "caption")
 
@@ -146,14 +147,17 @@ def main(argv=None) -> None:
     ap.add_argument("--num-samples", type=int, default=None, help="samples per image at T>0 (default: config)")
     ap.add_argument("--max-images", type=int, default=None, help="first N image ids only (smoke tests)")
     ap.add_argument("--batch-size", type=int, default=None)
+    add_check_args(ap)
     ap.add_argument("--out", required=True)
     args = ap.parse_args(argv)
+    cfg = load_config(args.config)
+    if args.split:
+        cli_check(args, cfg, args.split, "generate")
 
     from contam.data.nocaps import ImageLoader, load_annotations
     from contam.data.splits import check_annotations
     from contam.models import HFVLM
 
-    cfg = load_config(args.config)
     prompts = load_prompts(args.prompts)
     ann = load_annotations(args.annotations or cfg["paths"]["annotations"])
     if args.split:

@@ -11,7 +11,7 @@ from contam.config import REPO_ROOT, write_json
 from contam.data.splits import annotations_hash, make_split
 from contam.eval.evaluate import evaluate_checkpoint
 from contam.eval.gates import g1_report, validate_inputs
-from tests.conftest import make_annotations
+from tests.conftest import locked_split, make_annotations
 from tests.test_review_fixes import FakeVLM, _tiny_dataset
 
 PATHS = [f"/tmp/b{s}.json" for s in range(5)]
@@ -41,14 +41,15 @@ def test_gate_rejects_non_gate_valid_margins(g1_setup):
 
 def test_compute_margins_records_realpaths(tmp_path):
     ann, split = _tiny_dataset(tmp_path)
+    cfg_path, lock, _, split_sha = locked_split(tmp_path, split)
     for s in range(5):
         m = evaluate_checkpoint({a["image_id"]: a["refs"][s] for a in ann}, ann, split, metrics=["cider"], tokenizer="simple", checkpoint_id=f"d0_s{s}")
-        write_json(m, tmp_path / f"d0_s{s}.json")
-    cmd = [sys.executable, str(REPO_ROOT / "scripts/compute_margins.py"), "--out", "m.json", "--d0"] + [f"d0_s{s}.json" for s in range(5)]
+        write_json(dict(m, manifest_split_sha256=split_sha), tmp_path / f"d0_s{s}.json")
+    cmd = [sys.executable, str(REPO_ROOT / "scripts/compute_margins.py"), "--config", str(cfg_path), "--lock", str(lock), "--out", "m.json", "--d0"] + [f"d0_s{s}.json" for s in range(5)]
     r = subprocess.run(cmd, cwd=tmp_path, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     m = json.load(open(tmp_path / "m.json"))
-    assert m["gate_valid"] is True and m["d0_files"] == [str((tmp_path / f"d0_s{s}.json").resolve()) for s in range(5)]
+    assert m["gate_valid"] is True and m["manifest_split_sha256"] == split_sha and m["d0_files"] == [str((tmp_path / f"d0_s{s}.json").resolve()) for s in range(5)]
 
 
 def test_gate_requires_seeds_per_cell(g1_setup):
@@ -110,7 +111,7 @@ def test_generate_and_score_refs_reject_other_annotations(tmp_path):
 
     ann, split = _tiny_dataset(tmp_path)
     write_json({"meta": {}, "images": _edited(ann)}, tmp_path / "ann2.json")
-    common = ["--annotations", str(tmp_path / "ann2.json"), "--split", str(tmp_path / "split.json"), "--checkpoint-id", "ck", "--out", str(tmp_path / "o.jsonl")]
+    common = ["--skip-manifest-check", "--annotations", str(tmp_path / "ann2.json"), "--split", str(tmp_path / "split.json"), "--checkpoint-id", "ck", "--out", str(tmp_path / "o.jsonl")]
     with pytest.raises(ValueError, match="annotations"):
         gen_main(common)
     r = subprocess.run([sys.executable, "scripts/score_refs.py"] + common, capture_output=True, text=True)

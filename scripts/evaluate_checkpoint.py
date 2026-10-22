@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 
 from contam.config import load_config, read_json, write_json
+from contam.data.freeze import add_check_args, cli_check
 from contam.data.nocaps import load_annotations
 from contam.eval.evaluate import (
     compare,
@@ -43,10 +44,12 @@ def main() -> None:
     ap.add_argument("--no-spice-cache", action="store_true")
     ap.add_argument("--allow-partial", action="store_true", help="allow generations for a subset of split images (smoke tests only)")
     ap.add_argument("--pos", action="store_true", help="add spaCy POS mix to S")
+    add_check_args(ap)
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
 
     cfg = load_config(args.config)
+    frozen = cli_check(args, cfg, args.split, "evaluate_checkpoint")
     ann = load_annotations(args.annotations or cfg["paths"]["annotations"])
     split = read_json(args.split)
     if args.allow_partial:
@@ -76,7 +79,8 @@ def main() -> None:
     )
     res["prompt_id"] = args.prompt_id
     res["provenance"] = prov
-    res["gate_valid"] = res["complete"]
+    res.update(frozen)
+    res["gate_valid"] = res["complete"] and frozen["manifest_split_sha256"] is not None
     if args.baseline:
         st = cfg["stats"]
         base = [read_json(p) for p in args.baseline]

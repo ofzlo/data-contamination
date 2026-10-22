@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
@@ -99,6 +100,43 @@ def verify(cfg: dict, lock_path=DEFAULT_LOCK, allow_unlocked: bool = False, requ
     if problems:
         raise RuntimeError(f"manifest lock {lock_path} mismatch: " + "; ".join(problems))
     return lock
+
+
+def check_split_frozen(cfg: dict, split_path, lock_path=DEFAULT_LOCK) -> dict:
+    """Eval-time check: the lock holds (``verify``) and ``split_path`` is a locked file, byte for byte.
+
+    The split is looked up in the lock by file name and its sha256 must equal the locked one, so an
+    unlocked split, or an edited copy anywhere, is refused. Returns the provenance recorded in eval
+    outputs: ``manifest_split_sha256`` (the split's lock entry; gate inputs must share it, and since
+    entries are never rewritten, an ``--add`` does not change it) and ``manifest_lock_sha256`` (the
+    whole lock file, provenance only).
+    """
+    lock = verify(cfg, lock_path, allow_unlocked=True)
+    p = Path(split_path)
+    e = lock["files"].get(p.name)
+    if e is None:
+        raise RuntimeError(f"{p.name} is not in manifest lock {lock_path}")
+    if file_sha256(p) != e["sha256"]:
+        raise RuntimeError(f"{split_path} does not match the locked {p.name} (sha256 differs)")
+    return {"manifest_split_sha256": e["sha256"], "manifest_lock_sha256": file_sha256(lock_path)}
+
+
+def add_check_args(ap: argparse.ArgumentParser) -> None:
+    ap.add_argument("--lock", default=str(DEFAULT_LOCK), help="manifest lock checked before evaluating")
+    ap.add_argument("--skip-manifest-check", action="store_true", help="smoke tests only: skip the manifest lock check; output is NOT gate-valid")
+
+
+def cli_check(args: argparse.Namespace, cfg: dict, split_path, context: str) -> dict:
+    """``check_split_frozen`` for a CLI (exit on mismatch); null shas, loudly, with --skip-manifest-check."""
+    if args.skip_manifest_check:
+        msg = f"WARNING: {context}: --skip-manifest-check is set; results are NOT valid for gate decisions"
+        warnings.warn(msg)
+        print("!" * len(msg) + "\n" + msg + "\n" + "!" * len(msg), file=sys.stderr)
+        return {"manifest_split_sha256": None, "manifest_lock_sha256": None}
+    try:
+        return check_split_frozen(cfg, split_path, args.lock)
+    except (RuntimeError, FileNotFoundError) as e:
+        raise SystemExit(f"{context}: {e}")
 
 
 def _now() -> str:

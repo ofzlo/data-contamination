@@ -115,6 +115,10 @@ python scripts/score_refs.py --checkpoint-id d0_s0 --adapter CKPT --split data/s
 python scripts/evaluate_checkpoint.py --checkpoint-id d0_s0 --generations outputs/gens/d0_s0.jsonl \
     --logprobs outputs/logprobs/d0_s0.jsonl --split data/splits/split_A.json --out outputs/metrics/d0_s0.json
 #    (add --baseline outputs/metrics/d0_s*.json for paired S / Δ / ΔRMI vs. d=0)
+#    Every eval CLI refuses a split that is not byte-identical to its manifests/MANIFEST.lock.json entry
+#    and records that entry's sha256 (--skip-manifest-check: smoke tests only, output not gate-valid).
+#    G0 chain for the five d=0 checkpoints (steps 3 and 4, pipelined, resumable; --dry-run to preview):
+python scripts/run_g0_eval.py --split data/splits/split_A.json --run G0_d0_s0=CKPT0 ... --run G0_d0_s4=CKPT4
 # 4. G0 margins, G1 report, B3 prompt intervention
 python scripts/compute_margins.py --d0 outputs/metrics/d0_s*.json --base outputs/metrics/base.json --out outputs/margins_A.json
 python scripts/gate_report.py --manifest g1_manifest.yaml --out outputs/g1_report.json

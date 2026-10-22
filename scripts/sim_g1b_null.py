@@ -57,14 +57,14 @@ def simulate(n_images: int, n_boot: int, reps: int, sigma_seed: float, seed: int
         wc = mu + sh + rng.normal(0, 4, len(ids))
         bp = rng.random(len(ids)) < np.clip(p + sh / 30, 0, 1)
         per = {str(i): {"word_count": float(w), "boilerplate": float(b), "sentence_count": 1.0, "exact_match_train": 0.0} for i, w, b in zip(ids, wc, bp)}
-        return {"checkpoint_id": name, "split": {"name": split["name"], "content_hash": split["content_hash"]}, "complete": True, "generations_hash": name, "provenance": PROV, "per_image": per}
+        return {"checkpoint_id": name, "split": {"name": split["name"], "content_hash": split["content_hash"]}, "complete": True, "generations_hash": name, "manifest_split_sha256": "sim", "provenance": PROV, "per_image": per}
 
     counts = {"gate": 0, "single": 0, "any_of_4": 0}
     for r in range(reps):
         base_paths = [f"/null/r{r}/d0_s{s}.json" for s in range(N_BASELINE_SEEDS)]
         base = [run(f"r{r}_d0_s{s}") for s in range(N_BASELINE_SEEDS)]
         dS = {f: style_margin([np.mean([m["per_image"][str(i)][f] for i in split["unseen"]]) for m in base], cfg["margins"]["sd_multiplier"]) for f in cfg["style"]["primary_metrics"]}
-        margins = {"gate_valid": True, "split": base[0]["split"], "d0_files": base_paths, "delta_S": dS}
+        margins = {"gate_valid": True, "split": base[0]["split"], "d0_files": base_paths, "manifest_split_sha256": "sim", "delta_S": dS}
         cks = [{"condition": c, "d": dose, "seed": s, "metrics": f"/null/r{r}/{c}_s{s}.json"} for c in ("Caption", "Paired") for s in range(k_seeds)]
         ms = [run(f"r{r}_{c['condition']}_s{c['seed']}") for c in cks]
         validate_inputs(split, margins, base_paths, base, cks, ms, k_seeds)

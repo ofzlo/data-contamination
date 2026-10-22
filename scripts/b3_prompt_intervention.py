@@ -22,6 +22,7 @@ import numpy as np
 
 from contam.config import load_config, load_prompts, load_yaml, read_json, write_json
 from contam.config import DEFAULT_PROMPTS
+from contam.data.freeze import add_check_args, cli_check
 from contam.data.nocaps import ImageLoader, load_annotations
 from contam.eval.evaluate import evaluate_checkpoint, load_generations
 from contam.eval.stats import bootstrap_paired_diff
@@ -49,9 +50,11 @@ def main() -> None:
     ap.add_argument("--max-images", type=int, default=None, help="first N split images (smoke tests; Q is then not comparable to full-set numbers)")
     ap.add_argument("--tokenizer", default="ptb", choices=["ptb", "simple"])
     ap.add_argument("--metrics", nargs="*", default=["cider", "spice"])
+    add_check_args(ap)
     args = ap.parse_args()
 
     cfg = load_config(args.config)
+    frozen = cli_check(args, cfg, args.split, f"b3_prompt_intervention {args.phase}")
     prompts = load_prompts(args.prompts)
     b3_ids = load_yaml(args.prompts or DEFAULT_PROMPTS)["b3"]["prompt_ids"]
     out_dir = Path(args.out_dir or cfg["paths"]["outputs_dir"] / "b3")
@@ -74,7 +77,8 @@ def main() -> None:
         return
 
     st = cfg["stats"]
-    report = {"split": split["name"], "n_images": len(ids), "prompts": {p: prompts[p] for p in b3_ids}, "models": {}}
+    report = {"split": split["name"], "n_images": len(ids), "prompts": {p: prompts[p] for p in b3_ids}, **frozen, "models": {}}
+    report["gate_valid"] = frozen["manifest_split_sha256"] is not None and args.max_images is None
     for name in tags:
         per_prompt = {}
         for pid in b3_ids:
