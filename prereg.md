@@ -129,7 +129,12 @@ and robustness.
 - **Sanity check.** The untrained base model's CIDEr (all10, all images) is compared with a warning
   band, currently [95, 115] around the ≈105 that lmms-eval reports for LLaVA-1.5-7B on NoCaps val.
   This is a warning band, not a hard pass/fail.
-  - TODO(Yoorhim): verify the reported number and the prompt it used.
+  - W1 check (2026-10-21, split A, all 4,500 images, T=0). The ≈105 holds only for a one-sentence
+    prompt. "Describe the image in one short sentence." gives CIDEr 105.6, matching lmms-eval.
+    The current p_cap placeholder, "Describe the image.", gives CIDEr 0.003: base captions average
+    72.6 words, and CIDEr-D's Gaussian length penalty (σ = 6) zeroes them. SPICE (held-out) is
+    16.29 for both prompts. Details: `docs/results/w1_base_b3.md`.
+  - TODO(team): the band must be set for the locked p_cap. With a long-form p_cap the band is ≈0.
 - **G4 metrics** (counterfactual references, CLIPScore, LLM judge, human pairwise) are out of scope
   for this draft.
 
@@ -339,6 +344,14 @@ reading implemented in `scripts/gate_report.py`.
 - TODO(Kaustav): detector protocol (DCQ, CDD, KDS) and the false-positive controls.
 - TODO(team): sign off on the single-primary G1(b) rule in Section 6, which settles the
   multiple-comparison question at G1. The same question is still open for G2's τ_style metric.
+- TODO(team, raised by Yoorhim after W1): CIDEr-D and a long-form p_cap. With the current p_cap,
+  base CIDEr-D is ≈0 (Section 3). Any exposure that shortens captions toward NoCaps length then
+  moves CIDEr-D from ≈0 to ≈100 through the length penalty alone. That inflates the primary A
+  metric (Δ on held-out CIDEr, eq. 3) with an S effect. Options:
+  1. Keep the neutral p_cap. Add a length-controlled A metric, either SPICE held-out or CIDEr
+     without the length penalty, as co-primary.
+  2. Use a one-sentence p_cap. This removes most of the length-driven S signal that RQ1 relies on.
+  Decide before G1.
 
 ## Amendments
 
