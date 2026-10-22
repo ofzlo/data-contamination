@@ -97,3 +97,15 @@ gates:
   g1_a_dose: 64
   tau_style_metric: word_count
   tau_memory_metric: rmi_sum
+  # G2 (scripts/g2_report.py). Caption and Paired share one dose grid: every g2_doses entry plus
+  # any g2_optional_doses supplied (d=8 "if the gap is wide"); SameDist only at g2_samedist_dose.
+  g2_seeds_per_cell: 3
+  g2_doses: [1, 4, 16, 64]
+  g2_optional_doses: [8]
+  g2_samedist_dose: 16
+  g2_tau_condition: Paired   # d_style / d_memory come from this condition; Caption's taus are reported only
+  # G2 primary equivalence rule (proposed by Yoorhim from the sim_g2_null.py table, needs team
+  # sign-off; revisit once sigma_seed for dRMI is estimated): upper bound of the two-level (seeds,
+  # then images) bootstrap CI < delta_V. Alternatives, all reported: pooled | pooled_and_every_seed
+  # | seed_t. PASS rates: scripts/sim_g2_null.py, prereg Section 6.
+  g2_equivalence_rule: two_level_bootstrap

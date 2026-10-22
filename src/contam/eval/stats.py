@@ -44,6 +44,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Mapping, Sequence
 
 import numpy as np
+from scipy.stats import t as t_dist
 
 Data = Mapping[str, Mapping[str, np.ndarray]]
 
@@ -347,6 +348,33 @@ def estimate_taus(
             "ci_above_zero": bool(lo > 0),
         },
     }
+
+
+def bootstrap_two_level(model_seeds, base_seeds, n_boot: int = 2000, seed: int = 0, ci: float = 0.95) -> BootResult:
+    """Percentile CI of mean(model − base) over images, with training-seed AND image variance.
+
+    ``model_seeds`` / ``base_seeds`` are (n_seeds, n_images) arrays aligned by image. Each replicate
+    resamples the model's seeds and the base seeds (with replacement), pools each image over the
+    drawn seeds, then resamples images. The point estimate is the all-seed pooled difference.
+    """
+    M, B = np.asarray(model_seeds, dtype=float), np.asarray(base_seeds, dtype=float)
+    k, m, n = M.shape[0], B.shape[0], M.shape[1]
+    rng = np.random.default_rng(seed)
+    reps = np.empty(n_boot)
+    for b in range(n_boot):
+        diff = M[rng.integers(0, k, k)].mean(axis=0) - B[rng.integers(0, m, m)].mean(axis=0)
+        reps[b] = diff[rng.integers(0, n, n)].mean()
+    lo, hi = percentile_ci(reps, ci)
+    return BootResult(float(np.mean(M.mean(axis=0) - B.mean(axis=0))), float(lo), float(hi), ci, n_boot, reps)
+
+
+def seed_t_interval(per_seed: Sequence[float], ci: float = 0.95) -> dict:
+    """Two-sided t interval (df = n_seeds − 1) of the mean of per-seed point estimates."""
+    x = np.asarray(per_seed, dtype=float)
+    if x.size < 2:
+        raise ValueError("need at least two seeds for a seed-level t interval")
+    half = t_dist.ppf((1 + ci) / 2, x.size - 1) * x.std(ddof=1) / np.sqrt(x.size)
+    return {"estimate": float(x.mean()), "ci_lo": float(x.mean() - half), "ci_hi": float(x.mean() + half), "ci": ci, "df": int(x.size - 1)}
 
 
 def equivalence_below(boot: BootResult, delta: float) -> bool:

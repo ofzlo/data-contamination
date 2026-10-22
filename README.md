@@ -122,6 +122,8 @@ python scripts/run_g0_eval.py --split data/splits/split_A.json --run G0_d0_s0=CK
 # 4. G0 margins, G1 report, B3 prompt intervention
 python scripts/compute_margins.py --d0 outputs/metrics/d0_s*.json --base outputs/metrics/base.json --out outputs/margins_A.json
 python scripts/gate_report.py --manifest g1_manifest.yaml --out outputs/g1_report.json
+python scripts/g2_report.py --split data/splits/split_A.json --margins outputs/margins_A.json --g1-report outputs/g1_report.json \
+    --baseline outputs/metrics/d0_s*.json --checkpoints outputs/metrics/{caption,paired,samedist}_d*_s*.json --out outputs/g2_report_A.json
 python scripts/sim_g1b_null.py   # G1(b) false-PASS rate under no effect (prereg.md, Section 6)
 python scripts/b3_prompt_intervention.py {generate,evaluate} --split data/splits/split_A.json --model-tag base --model-tag d0_s0=CKPT
 ```

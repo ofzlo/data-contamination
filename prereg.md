@@ -260,8 +260,24 @@ produces δ_V at G1.
      CI uses interpolated crossings of the per-replicate fits. These are different estimators, so
      the reported τ̂ difference can fall outside its own CI. Gate decisions use the CI. τ̂ is
      reported for interpretation only.
-- **Equivalence (G2 primary).** The V effect at d_style passes if the upper bound of its two-sided
-  95% CI is below δ_V.
+- **Equivalence (G2 primary).** The V effect at d_style (Paired, mean seen ΔRMI summed, pooled
+  over seeds) passes if the upper bound of its two-sided 95% two-level bootstrap CI is below δ_V
+  (`gates.g2_equivalence_rule: two_level_bootstrap`). Each replicate resamples the 3 seeds of the
+  cell and the 5 d=0 seeds (with replacement), pools each image over the drawn seeds, then
+  resamples images, so the CI includes training-seed variance.
+  - Proposed by Yoorhim on the basis of the Section 6 G2 table. TODO(team): sign-off; revisit after
+    σ_seed for ΔRMI is estimated from the G0 seeds and the G1 seed pairs.
+  - Known limitation: resampling k = 3 seeds with replacement understates the seed variance by
+    (k − 1)/k, and 3 seeds allow only 10 distinct resamples. Boundary false PASS is therefore still
+    above nominal at large σ_seed: 0.046 at σ_seed 0.4 in Section 6. An independent reviewer
+    simulation, with seed shifts on trained runs only, gives 0.067 (SE ≈ 0.02).
+    Candidate fixes to decide at sign-off:
+    1. Inflate the drawn seed deviations by √(k/(k − 1)).
+    2. Gate on the larger of the two-level and seed-t upper bounds.
+  - The image bootstrap alone does not see training-seed variance, so the CI-only rule falsely
+    passes far more often than 2.5% when σ_seed > 0. Three alternatives are computed and reported,
+    not gating: the image-bootstrap CI only; that CI AND every seed's point estimate below δ_V
+    (mirroring G1(b)); a seed-level t interval (df = 2) over the per-seed estimates.
   - TODO(team): the plan says "upper 95% CI". A one-sided 95% bound (the 90% two-sided interval)
     would be the standard TOST convention. This draft uses the stricter 97.5th percentile.
 
@@ -322,8 +338,54 @@ reading implemented in `scripts/gate_report.py`.
   - d_style and d_memory are fixed here.
 - If it fails: if both effects start at the same d, reframe as "dose-response per component" and
   skip C3.
-- *d_style = τ̂_style and d_memory = τ̂_memory, both within the Paired condition.*
-- *TODO(team): should τ_style come from Paired, or from Caption?*
+- *Implemented in `scripts/g2_report.py` (`contam.eval.gates.g2_report`). Inputs: the five G0 d=0
+  seeds as baseline, δ_S from the G0 margins, δ_V from a gate-valid G1 report whose (a) passed,
+  and every metrics file under the split's current lock entry (Section 2). Caption and Paired
+  share one grid with every d in {1, 4, 16, 64} (plus d=8 if supplied), 3 seed slots per cell;
+  SameDist d=16 × 3 is reported only.*
+- *d_style = τ̂_style and d_memory = τ̂_memory, both within the Paired condition
+  (`gates.g2_tau_condition`). τ_style is the directional unseen word-count effect vs δ_S, τ_memory
+  the mean seen ΔRMI (summed) vs δ_V (Section 5). Caption's τ_style and τ_memory are reported, not
+  gating.*
+- *Primary: the equivalence rule of Section 5 (two-level bootstrap CI upper bound < δ_V). If τ̂_style = +∞ there is no d_style on the grid: the primary is not evaluable
+  and fails. The G2 verdict is the primary one. The G1 report must have been made from the same
+  baseline and margins files.*
+- *PASS rates of the G2 primary rules from `python scripts/sim_g2_null.py --reps 500 --n-boot 300
+  --n-images 900 --sigma-seed 0 0.1 0.2 0.4 --mult 1.0 1.2 0 0.5 --seed 0 --jobs 4` (real gate
+  code, 11.5 min on 4 CPUs; model in the script docstring: per-image ΔRMI SD 2, δ_V = 0.5, every
+  run shifted by N(0, σ_seed), d=0 seeds included; true Paired V effect at d_style = mult × δ_V).
+  mult ≥ 1: false PASS (nominal ≤ 0.025); mult < 1: power. The two-level bootstrap is the gate rule:*
+
+  | mult | σ_seed | pooled CI only | pooled + every seed | two-level bootstrap | seed t (df 2) |
+  |-----:|-------:|---------------:|--------------------:|--------------------:|--------------:|
+  | 1.0  | 0      | 0.032          | 0.032               | 0.000               | 0.036         |
+  | 1.0  | 0.1    | 0.088          | 0.062               | 0.010               | 0.034         |
+  | 1.0  | 0.2    | 0.184          | 0.118               | 0.030               | 0.044         |
+  | 1.0  | 0.4    | 0.322          | 0.160               | 0.046               | 0.032         |
+  | 1.2  | 0      | 0.000          | 0.000               | 0.000               | 0.002         |
+  | 1.2  | 0.1    | 0.004          | 0.002               | 0.002               | 0.002         |
+  | 1.2  | 0.2    | 0.078          | 0.044               | 0.006               | 0.014         |
+  | 1.2  | 0.4    | 0.236          | 0.102               | 0.034               | 0.014         |
+  | 0    | 0      | 1.000          | 1.000               | 1.000               | 0.982         |
+  | 0    | 0.1    | 1.000          | 1.000               | 0.992               | 0.858         |
+  | 0    | 0.2    | 0.992          | 0.960               | 0.850               | 0.548         |
+  | 0    | 0.4    | 0.876          | 0.680               | 0.498               | 0.236         |
+  | 0.5  | 0      | 0.950          | 0.944               | 0.704               | 0.680         |
+  | 0.5  | 0.1    | 0.882          | 0.822               | 0.556               | 0.436         |
+  | 0.5  | 0.2    | 0.746          | 0.610               | 0.362               | 0.196         |
+  | 0.5  | 0.4    | 0.624          | 0.392               | 0.198               | 0.124         |
+- *Plainly: the every-seed rule roughly halves the CI-only rule's false PASS, but at the boundary
+  (V effect = δ_V) it still falsely passes 6% to 16% for σ_seed 0.1 to 0.4 (vs. 2.5% nominal), and
+  10% at 1.2 × δ_V with σ_seed 0.4. Only the two-level bootstrap (≤ 4.6%) and the seed t interval
+  (≤ 4.4%) stay near nominal, at a clear cost in power; the two-level bootstrap has more power
+  than the t interval, so it is the default. It is still above 2.5% at σ_seed 0.4 (0.046): three
+  seeds per cell cannot pin down seed variance. TODO(team): sign off, and revisit after estimating
+  σ_seed for ΔRMI from the five G0 seeds and the G1 seed pairs.*
+- *Secondary: the bootstrap CI of log₂ τ*_memory − log₂ τ*_style (Section 5 censoring rules) has
+  lower bound > 0; censoring fractions are reported.*
+- *The fallback above is reported whenever τ̂_style = τ̂_memory (finite).*
+- *TODO(team): should τ_style come from Paired, or from Caption? Should a failed secondary also
+  fail G2?*
 
 **G3. Does the order replicate on a new split?**
 - Conditions: split B, {Caption, Paired} × {d_style, d_memory} × 2 seeds, d=0 shared.

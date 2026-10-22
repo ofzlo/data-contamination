@@ -13,6 +13,7 @@ Manifest (YAML or JSON):
 from __future__ import annotations
 
 import argparse
+import os
 
 from contam.config import load_config, load_yaml, read_json, write_json
 from contam.data.freeze import add_check_args, cli_check
@@ -40,8 +41,9 @@ def main() -> None:
     report = g1_report(split, margins, base, cks, cms, cfg, args.allow_partial)
     report.update(frozen)
     report["gate_valid"] = report["gate_valid"] and frozen["manifest_split_sha256"] is not None
-    report["margins_file"] = man["margins"]
-    report["baseline_files"] = list(man["baseline"])
+    # realpaths, so later checks against these files (scripts/g2_report.py) do not depend on the cwd
+    report["margins_file"] = os.path.realpath(man["margins"])
+    report["baseline_files"] = [os.path.realpath(p) for p in man["baseline"]]
     write_json(report, args.out)
 
     a, b = report["criteria"]["a"], report["criteria"]["b"]
