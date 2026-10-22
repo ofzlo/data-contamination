@@ -349,7 +349,10 @@ reading implemented in `scripts/gate_report.py`.
   moves CIDEr-D from ≈0 to ≈100 through the length penalty alone. That inflates the primary A
   metric (Δ on held-out CIDEr, eq. 3) with an S effect. Options:
   1. Keep the neutral p_cap. Add a length-controlled A metric, either SPICE held-out or CIDEr
-     without the length penalty, as co-primary.
+     without the length penalty, as co-primary. In B3, the CIDEr variants still separate the
+     prompts: without the length penalty by +78, and on the first sentence only by +51. SPICE
+     held-out does not (Δ −0.00 [−0.21, +0.21]). So SPICE held-out is the candidate
+     (`docs/results/w1_base_b3.md`).
   2. Use a one-sentence p_cap. This removes most of the length-driven S signal that RQ1 relies on.
   Decide before G1.
 

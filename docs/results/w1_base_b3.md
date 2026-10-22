@@ -34,6 +34,39 @@ The equal SPICE held-out means (16.2903) for neutral and nocaps_like are a coinc
 cache artifact. Per image, only 0.3% of values are equal (r = 0.39). The group means differ in
 opposite directions and cancel: seen 16.35 vs. 16.32, unseen 16.23 vs. 16.26.
 
+## Does a length-controlled CIDEr remove the style effect?
+
+`scripts/analysis/b3_length_control.py` scores the same captions against the 9 held-out
+references in three ways. Each variant scores the 4,500 images as one corpus.
+
+- **CIDEr-D:** standard, σ = 6.
+- **CIDEr-D without the length penalty:** σ → ∞; clipping is kept.
+- **First sentence only:** CIDEr-D on each caption's first sentence.
+
+Word counts here are whitespace counts.
+
+| Prompt | Words | First-sentence words | CIDEr-D | No length penalty | First sentence |
+|---|---|---|---|---|---|
+| neutral | 72.4 | 15.5 | 0.00 | 42.5 | 53.9 |
+| nocaps_like | 11.1 | 11.1 | 105.3 | 120.6 | 105.3 |
+| verbose | 76.3 | 15.5 | 0.00 | 41.1 | 53.4 |
+
+nocaps_like − neutral, estimate [95% CI]:
+
+| Metric | Difference |
+|---|---|
+| CIDEr-D | +105.3 [+103.4, +107.3] |
+| No length penalty | +78.1 [+76.4, +80.0] |
+| First sentence | +51.4 [+49.9, +53.0] |
+| SPICE held-out (above) | −0.00 [−0.21, +0.21] |
+
+- Removing the length penalty, or comparing only first sentences, still leaves a +51 to +78
+  point gap. CIDEr's TF-IDF cosine dilutes long captions and penalizes their register (for
+  example "The image features …"), so no CIDEr variant isolates content.
+- SPICE held-out shows no gap.
+- **Recommendation for the prereg Section 7 decision:** if the long-form p_cap is kept, make
+  SPICE held-out a co-primary A metric. A CIDEr variant would still carry the S effect.
+
 ## G0: base sanity check
 
 - With the p_cap placeholder, base CIDEr all10 is **0.003**. The prereg warning band is
@@ -93,3 +126,4 @@ opposite directions and cancel: seen 16.35 vs. 16.32, unseen 16.23 vs. 16.26.
   - `outputs/g0/base_caption.jsonl` and `outputs/g0/base_metrics.json`
   - `outputs/b3/base.jsonl`, `outputs/b3/b3_report.json` and `outputs/b3/b3_report_cider.json`
   - `outputs/logprobs/base.jsonl` and `outputs/g0/base_metrics_v.json` (G0 metrics with V)
+  - `outputs/b3/length_control.json`
