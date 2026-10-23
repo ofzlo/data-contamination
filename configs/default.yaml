@@ -10,7 +10,9 @@ paths:
   images_dir: ${CONTAM_DATA_ROOT:-data}/nocaps/images
   splits_dir: ${CONTAM_DATA_ROOT:-data}/splits
   coco_captions: ${CONTAM_DATA_ROOT:-data}/coco/annotations/captions_train2017.json   # D4 SameDist source
-  llava_mix: ${CONTAM_DATA_ROOT:-data}/llava/llava_v1_5_mix665k.json                  # general instruction pool
+  llava_mix: ${CONTAM_DATA_ROOT:-data}/llava/json/llava_v1_5_mix665k.json             # general instruction pool
+  llava_images: ${CONTAM_DATA_ROOT:-data}/llava       # root of the 665K "image" paths (coco/, gqa/, ocr_vqa/, textvqa/, vg/)
+  ckpt_dir: ${CONTAM_CKPT_DIR:-data/ckpt}             # training outputs (adapters, resume checkpoints); data/ is on /scratch
   outputs_dir: ${CONTAM_OUTPUTS:-outputs}
   spice_cache: ${CONTAM_OUTPUTS:-outputs}/cache/spice_cache.json
 
@@ -50,6 +52,35 @@ training:
   # Order of the LLaVA-665K general pool (contam.data.general_pool). Every run takes its first
   # M - K examples, so exposure replaces the tail of one fixed order.
   general_seed: 20261022
+  # LoRA SFT recipe (contam.train; LLaVA-1.5 LoRA finetune defaults). LoRA on the language model's
+  # attention and MLP projections only (vision tower frozen, no LoRA there); the projector is trained
+  # in full (PEFT modules_to_save) at its own lr. Trainable weights are fp32 masters, the forward runs
+  # in models.dtype under autocast on GPU.
+  lora_r: 128
+  lora_alpha: 256
+  lora_dropout: 0.05
+  lora_target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+  projector_module: multi_modal_projector
+  lr: 2.0e-4
+  projector_lr: 2.0e-5
+  weight_decay: 0.0
+  adam_betas: [0.9, 0.999]
+  adam_eps: 1.0e-8
+  max_grad_norm: 1.0
+  lr_scheduler: cosine
+  warmup_ratio: 0.03
+  epochs: 1
+  global_batch_size: 128         # = micro_batch_size x gradient accumulation (one GPU)
+  micro_batch_size: 16           # per forward/backward; must divide global_batch_size. A100 80GB (scripts/timing_run.py,
+                                 # 2026-10-22): worst case 16 x 2048 tokens peaks at 36.8 GiB; 32 fits but was slower (random order)
+  loss_normalization: per_example_mean   # each example weighs 1/B in its optimizer step (contam.train; prereg Section 3)
+  micro_batch_order: length_sorted       # sort each optimizer step's examples by length before cutting micro-batches
+  max_len: 2048                  # tokens per example, image tokens included; longer examples are truncated
+  gradient_checkpointing: true
+  checkpoint_every_steps: 20     # resume checkpoints (optimizer steps); ~15-20 min at the expected step time
+  keep_checkpoints: 2
+  keep_checkpoints_after_done: false   # delete resume checkpoints once DONE (adapter verified); ~7.8 GB per run
+  num_workers: 3                 # DataLoader workers (image decoding)
 
 style:
   # Boilerplate openers typical of instruction-tuned VLMs (case-insensitive regexes, matched anywhere).

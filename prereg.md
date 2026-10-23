@@ -193,6 +193,19 @@ classifier (not built yet).
   Prompt, BOS and image tokens are masked. Including the end token means a reference counts as
   likely only if the model would also stop after it.
   - TODO(Minho): the training target format must use the same separator and end token.
+    Implemented in `contam.train.build_example`: a one-turn (p_cap, ref) training example is token
+    for token the scored sequence, with the loss on exactly the scored positions (tested with the
+    real llava-hf processor and the 7B model). No system prompt. Multi-turn examples join turns as
+    LLaVA-1.5 `v1` does, with `</s>` after each answer.
+- **Training loss normalization.** Per-example mean: each example's loss is the mean over its own
+  supervised tokens (answer tokens plus end token), and each example weighs 1/B in its optimizer
+  step (B = 128, or the real count in the last, partial step). An exposed example's dose then does
+  not depend on its batchmates or on how the step is cut into micro-batches. Micro-batches are
+  length-sorted inside each optimizer step, which holds the same examples as without sorting.
+  This deviates from LLaVA-1.5, which takes a mean of per-device token means and uses
+  `group_by_modality_length` (`training.loss_normalization`, `training.micro_batch_order`; both are
+  in the training config hash). Proposed by Yoorhim. TODO(team): sign off before G0. It must not
+  change between runs.
 - **Rank** of the training reference among all 10 by summed log p. Rank 1 is the most likely. Ties
   do not count against the training reference.
 - **RMI** (Section "Shared metrics" of the plan):

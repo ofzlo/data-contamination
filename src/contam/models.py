@@ -16,7 +16,8 @@ summed over the caption tokens AND the end token; prompt, BOS and image tokens a
 ``n_tokens`` counts the same positions (caption tokens + 1). Including the end token means a
 reference scores high only if the model would also stop after it, matching what T=0 generation
 must do to reproduce it verbatim. The same rule applies to every reference and every checkpoint.
-The training target format (Minho) must use the same separator and end token.
+The training target format (``contam.train.build_example``) uses the same prefix, separator and
+end token, built from ``turn_prefix`` / ``end_token_id`` / ``configure_processor`` below.
 """
 
 from __future__ import annotations
@@ -48,18 +49,8 @@ class HFVLM:
         if adapter:
             self.model = load_lora(self.model, adapter, merge_adapter)
         self.model.eval()
-        cfg = self.model.config
-        # Make the processor expand <image> into the full run of image tokens (needed for masking).
-        if getattr(self.processor, "patch_size", "missing") is None and hasattr(cfg, "vision_config"):
-            self.processor.patch_size = cfg.vision_config.patch_size
-        if getattr(self.processor, "vision_feature_select_strategy", "missing") is None:
-            self.processor.vision_feature_select_strategy = getattr(cfg, "vision_feature_select_strategy", "default")
-        tok = self.processor.tokenizer
-        if tok.pad_token_id is None:
-            tok.pad_token = tok.eos_token
-        self.end_token_id = tok.eos_token_id if end_token is None else tok.convert_tokens_to_ids(end_token)
-        if self.end_token_id is None or self.end_token_id == tok.unk_token_id:
-            raise ValueError(f"end token {end_token!r} is not in the vocabulary")
+        configure_processor(self.processor, self.model.config)
+        self.end_token_id = end_token_id(self.processor.tokenizer, end_token)
 
     # ------------------------------------------------------------------ prompt
 
@@ -206,7 +197,31 @@ def load_lora(model, adapter: str, merge: bool = True):
     return merged
 
 
+def configure_processor(processor, model_config) -> None:
+    """Make the processor expand <image> into the full run of image tokens (needed for masking) and pad."""
+    if getattr(processor, "patch_size", "missing") is None and hasattr(model_config, "vision_config"):
+        processor.patch_size = model_config.vision_config.patch_size
+    if getattr(processor, "vision_feature_select_strategy", "missing") is None:
+        processor.vision_feature_select_strategy = getattr(model_config, "vision_feature_select_strategy", "default")
+    tok = processor.tokenizer
+    if tok.pad_token_id is None:
+        tok.pad_token = tok.eos_token
+
+
+def end_token_id(tokenizer, end_token: str | None = None) -> int:
+    """The token appended after every scored reference / trained answer (EOS unless ``end_token``)."""
+    tid = tokenizer.eos_token_id if end_token is None else tokenizer.convert_tokens_to_ids(end_token)
+    if tid is None or tid == tokenizer.unk_token_id:
+        raise ValueError(f"end token {end_token!r} is not in the vocabulary")
+    return tid
+
+
+def turn_prefix(processor, prompt: str, image: bool = True) -> str:
+    """One user turn up to the assistant's answer: ``"USER: <image>\\n{prompt} ASSISTANT:"`` for llava-hf."""
+    content = ([{"type": "image"}] if image else []) + [{"type": "text", "text": prompt}]
+    return processor.apply_chat_template([{"role": "user", "content": content}], add_generation_prompt=True)
+
+
 def prefix_for(processor, prompt: str) -> str:
     """The generation prompt string for ``prompt`` (shared by generation and scoring)."""
-    msgs = [{"role": "user", "content": [{"type": "image"}, {"type": "text", "text": prompt}]}]
-    return processor.apply_chat_template(msgs, add_generation_prompt=True)
+    return turn_prefix(processor, prompt, image=True)
