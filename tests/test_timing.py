@@ -71,3 +71,53 @@ def test_steady_state_skips_warmup_per_segment_and_projects(tmp_path):
     assert v["optimizer_steps"] == 2344 and v["train_gpu_h_per_run"] == pytest.approx(300000 / 12.8 / 3600, abs=0.01)
     assert v["gpu_h_per_run"] == pytest.approx(300000 / 12.8 / 3600 + 117 * 36 / 3600 + 0.1, abs=0.01)
     assert v["P0"]["eval_gpu_h"] == pytest.approx(99 * 1.7, abs=0.1) and v["G0"]["eval_ckpts"] == 6
+
+
+def test_exposure_sample_replaces_the_tail_at_the_run_share(tmp_path):
+    from PIL import Image
+
+    from contam.config import load_config
+    from contam.data.splits import make_split
+    from tests.conftest import make_annotations
+
+    cfg = _mix(tmp_path)
+    ann = make_annotations(30, 120, 50, seed=3)
+    split = make_split(ann, 1, 2, name="A")
+    (tmp_path / "splits").mkdir()
+    write_json(split, tmp_path / "splits" / "split_A.json")
+    write_json({"meta": {}, "images": ann}, tmp_path / "annotations.json")
+    cfg["paths"]["annotations"] = tmp_path / "annotations.json"
+    cfg["exposure"] = load_config()["exposure"]
+    general, info = timing_run.build_sample(cfg, 100, "stand-in", log=lambda m: None)
+    with pytest.raises(SystemExit, match="ln -s"):  # NoCaps images not linked under the image root yet
+        timing_run.add_exposure(cfg, general, info, 100, "paired", 4, 20, 160, "A")
+    for a in ann:
+        p = tmp_path / "llava" / "nocaps" / a["file_name"]
+        p.parent.mkdir(parents=True, exist_ok=True)
+        Image.fromarray(np.zeros((8, 8, 3), dtype=np.uint8)).save(p, format="JPEG")
+    ex, info2 = timing_run.add_exposure(cfg, general, info, 100, "paired", 4, 20, 160, "A")  # K = 80 = half of M
+    e = info2["exposure"]
+    assert len(ex) == 100 and e["K"] == 80 and e["n_exposed_in_sample"] == 50 and e["n_general_in_sample"] == 50
+    assert ex[:50] == general[:50] and all(x["source"] == "exposed_paired" for x in ex[50:])
+    imgs = [x["image"] for x in ex[50:]]
+    assert len(set(imgs)) == 20 and max(Counter(imgs).values()) - min(Counter(imgs).values()) <= 1  # round-robin over the 20 images
+
+
+def test_d2_summary_pools_repeats_per_cell():
+    spec2 = importlib.util.spec_from_file_location("d2_summary", REPO_ROOT / "scripts" / "d2_summary.py")
+    d2 = importlib.util.module_from_spec(spec2)
+    spec2.loader.exec_module(d2)
+
+    def rep(r, eps, exp=None):
+        return {"gpu": "A100", "args": {"repeat": r}, "sample": {"exposure": exp},
+                "timing": {"examples_per_s": eps, "step_time_s_mean": 128 / eps, "checkpoint_save_s": 30.0, "overhead_s": 300.0,
+                           "steps_measured": 995, "micro_batch_size": 16, "tokens_per_example": 800, "peak_mem_gib": 30.0}}
+
+    exp = {"condition": "paired", "d": 64, "n_exp": 1000, "share": 0.4923, "M": 130000}
+    rows = d2.summarize([rep(0, 4.0), rep(1, 4.2), rep(2, 3.8), rep(0, 5.0, exp), rep(1, 5.0, exp)], M=130000, gbs=128, every=200)
+    by = {r["cell"]: r for r in rows}
+    g = by["general only (d=0)"]
+    assert g["repeats"] == [0, 1, 2] and g["examples_per_s"] == (4.0, 0.2)
+    assert g["gpu_h_per_run"] == pytest.approx(130000 / 4.0 / 3600 + (1016 // 200) * 30 / 3600 + 300 / 3600, abs=0.01)
+    assert by["paired d=64 (N_exp 1000, share 0.492 of M 130,000)"]["examples_per_s"] == (5.0, 0.0)
+    assert "| general only (d=0) | A100 | r0 (995), r1 (995), r2 (995) |" in d2.markdown(rows)

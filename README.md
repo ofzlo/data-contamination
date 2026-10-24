@@ -87,6 +87,44 @@ scripts/                  # CLIs below
 tests/                    # pytest, no GPU needed
 ```
 
+## D2 timing run (Minho)
+
+Decision memo of 2026-10-23: M = 130k (provisional), N_exp = 1,000, d ∈ {0, 1, 4, 16, 64}. Time two
+cells, general only (d=0) and d=64, three repeats each, at least 1,000 optimizer steps per repeat.
+Everything below runs inside one A100 session (1 GPU, `-c 4`, 40G, 8 h) from the repository root.
+
+```bash
+conda activate /scratch/$USER/envs/contam
+export CONTAM_DATA_ROOT=/scratch/$USER/data-contamination/data
+# once: the exposed NoCaps images must sit under the 665K image root, as nocaps/<file>
+ln -sfn $CONTAM_DATA_ROOT/nocaps/images $CONTAM_DATA_ROOT/llava/nocaps
+
+# general only (d=0): repeat r = 0, 1, 2 (seed slot r -> its own data order and run dir)
+python scripts/timing_run.py --n 128000 --steps 1000 --repeat 0
+# d=64: Paired, split A, K = 1,000 x 64 = 64,000 of M = 130,000 (49%) replace the sample's tail
+python scripts/timing_run.py --n 128000 --steps 1000 --exposure-d 64 --n-exp 1000 --M 130000 --repeat 0
+```
+
+- `--n` must be at least steps x 128, so 128,000. The first call per cell builds the sample (it checks
+  every image once); the repeats reuse it.
+- At the expected 45–60 s per step, one 1,000-step repeat (about one full M = 130k run, which is 1,016
+  steps) takes 13–17 GPU-h, so it spans two or three sessions. When a session ends, rerun the same
+  command in the next one: it resumes from the trainer's checkpoint (every 20 steps, so at most 20
+  steps are lost), and the steady state skips the first 5 steps of each session again.
+- A 40G A100 may not fit micro-batch 16 (36.8 GiB worst case on the 80 GB card); the probe then falls
+  back to 8 or 4 by itself, and the report says which one ran.
+- Order: d=0 r0, d=64 r0, then r1 and r2 of both, so a usable comparison exists after two runs.
+
+Recording. Each finished repeat writes `outputs/timing/timing_report_<tag>.{json,txt}` (GPU, micro-batch,
+steady-state examples/s, s/step, peak memory, GPU-h projections). When all six are done:
+
+```bash
+python scripts/d2_summary.py --M 130000 --out docs/results/d2_timing.md   # mean ± SD per cell across repeats
+```
+
+Commit `docs/results/d2_timing.md` with the six `.txt` reports appended, and fill the D2 row of
+`prereg.md` with M, N_exp, the measured GPU-h per run and the date.
+
 ## Evaluation pipeline
 
 Setup (cluster):

@@ -4,6 +4,9 @@ prompts:
   caption:
     text: "Describe the image."   # PLACEHOLDER (p_cap; Kaustav to lock). Neutral on purpose: style effects need a long-form default.
     placeholder: true
+  caption_text:
+    text: "Write a caption for an image."   # PLACEHOLDER (D3, Kaustav): text-only Caption-condition template
+    placeholder: true
   neutral:
     text: "Describe the image."                          # PLACEHOLDER
     placeholder: true

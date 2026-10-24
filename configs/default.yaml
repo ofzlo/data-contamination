@@ -40,6 +40,10 @@ splits:
   A: {split_seed: 20261019, ref_seed: 20261020}   # explore
   B: {split_seed: 20261119, ref_seed: 20261120}   # confirm (G3)
 
+exposure:
+  # Shuffled condition: seed of the caption derangement over the exposed images (contam.data.exposure).
+  shuffle_seed: 20261023
+
 samedist:
   # D4: tie-break seed for picking COCO captions inside a length bucket (contam.data.samedist).
   seed: 20261021
