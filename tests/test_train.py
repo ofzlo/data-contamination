@@ -332,6 +332,7 @@ def test_run_spec_lock_check(tmp_path):
 
     cfg = load_config()
     real = read_json(DEFAULT_LOCK)
+    real = {**real, "files": {k: v for k, v in real["files"].items() if k != "general_order.jsonl"}}  # the order is frozen since B1
     splits = tmp_path / "splits"
     splits.mkdir()
     for name in real["files"]:

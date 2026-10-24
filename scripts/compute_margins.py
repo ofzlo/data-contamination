@@ -75,6 +75,7 @@ def main() -> None:
         out["delta_A"][f] = association_margin(seen, unseen, k)
         out["per_seed"][f"seen_minus_unseen/{f}"] = list(np.subtract(seen, unseen))
     out["delta_A_primary_metric"] = mcfg["a_metric"]
+    out["delta_A_coprimary_metric"] = mcfg.get("a_metric_coprimary")
     out["delta_V_rule"] = {"rel": mcfg["delta_v_rel"], "floor": mcfg["delta_v_floor"], "set_at": "G1 (Paired d=64)"}
 
     print(f"G0 margins on split {out['split']['name']} ({len(d0)} d=0 seeds, multiplier {k}):")
@@ -93,8 +94,13 @@ def main() -> None:
         out["base_cider_check"] = {"cider_all10": c, "band": [lo, hi], "in_band": ok, "prompt_id": base.get("prompt_id")}
         msg = f"  base CIDEr(all10) = {c:.2f}; reported-range band [{lo}, {hi}]"
         print(msg + (" OK" if ok else "  <-- WARNING: outside band; check prompt, decoding and tokenization before G1"))
+        sp = base["summary"]["all"].get("spice_all10")
+        if "base_spice_band" in mcfg and sp is not None:
+            slo, shi = mcfg["base_spice_band"]
+            out["base_spice_check"] = {"spice_all10": sp, "band": [slo, shi], "in_band": slo <= sp <= shi}
+            print(f"  base SPICE(all10) = {sp:.2f}; band [{slo}, {shi}]" + (" OK" if slo <= sp <= shi else "  <-- WARNING: outside band"))
         if base.get("prompt_id") != "caption":
-            print("  note: the reported range assumes a one-sentence caption prompt; compare with the matching B3 prompt", file=sys.stderr)
+            print("  note: the bands are set for p_cap (prompt_id caption); compare other prompts with their B3 numbers", file=sys.stderr)
     print("  G0 also requires: GPU hours per run confirmed (manual, Minho).")
     write_json(out, args.out)
     print(f"-> {args.out}")

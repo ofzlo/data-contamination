@@ -32,6 +32,14 @@ images with a Flickr photo id (`validation-images-with-rotation.csv`).
 - Not covered: near-duplicates under other ids (pixel hashes of ~100 GB of 665K images), CLIP's and
   Vicuna's training data (not public), and NoCaps text on the web in general.
 
+## Decisions (Minho, 2026-10-25)
+
+Recommendations 1–4 and 6 below were taken as written. For 5, p_cap is **"Describe the image in
+detail."** instead of "Describe the image." (still long-form, with SPICE held-out co-primary). So the
+existing `outputs/g0/base_caption.jsonl` (old prompt) can no longer be reused as in 7; the B3
+"verbose" rows of `outputs/b3/base.jsonl` are base captions under the new p_cap. Applied in
+`prereg.md` (Sections 1–3, 7), `configs/`, the rebuilt SameDist and the frozen general order.
+
 ## Recommendations
 
 1. **D1: keep LLaVA-1.5-7B.** NoCaps references are not in its training text, and 20 of 4,500
