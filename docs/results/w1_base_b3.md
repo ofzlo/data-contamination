@@ -1,7 +1,9 @@
 # W1 results: G0 base check and B3 prompt intervention
 
-Yoorhim, 2026-10-21. **Preliminary:** the neutral and verbose wording (and p_cap) are still
-placeholders owned by Kaustav. Rerun after they are locked.
+Yoorhim, 2026-10-21. The wording was locked on 2026-10-26 (Minho, prereg Section 7) as run
+here: neutral "Describe the image.", nocaps_like, verbose "Describe the image in detail." (= p_cap
+since D3). So the B3 base results below are final; only the G0 base row under the old p_cap
+placeholder ("Describe the image.") must be redone (prereg Section 3).
 
 ## Setup
 

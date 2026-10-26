@@ -2,8 +2,8 @@
 """B3 prompt intervention: how much CIDEr / SPICE move from prompt-induced style alone.
 
 Models: the untrained base model and the d=0 model(s) (base + LoRA adapter). Prompts: the B3 list
-in configs/prompts.yaml (neutral, nocaps_like, verbose; wording owned by Kaustav, placeholders
-are marked there). T=0 generation, then Q (CIDEr/SPICE, all reference configs) and S per
+in configs/prompts.yaml (neutral, nocaps_like, verbose; wording owned by Minho, locked
+2026-10-26). T=0 generation, then Q (CIDEr/SPICE, all reference configs) and S per
 (model, prompt), and the paired change of every prompt vs. ``neutral`` with bootstrap CIs.
 
 Example:

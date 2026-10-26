@@ -17,8 +17,8 @@ paths:
   spice_cache: ${CONTAM_OUTPUTS:-outputs}/cache/spice_cache.json
 
 models:
-  main: llava-hf/llava-1.5-7b-hf          # D1 (Kaustav): pending B1 audit
-  fallback: HuggingFaceTB/SmolVLM-Instruct  # D1/D6 (Kaustav)
+  main: llava-hf/llava-1.5-7b-hf          # D1 (Minho, 2026-10-25): B1 passed
+  fallback: HuggingFaceTB/SmolVLM-Instruct  # D6 candidate (Minho): pending the D6 audit, prereg Section 1
   dtype: bfloat16
   # Token appended after every scored reference (teacher forcing). null -> tokenizer.eos_token.
   # For SmolVLM use "<end_of_utterance>". Must match the training target format (Minho).
@@ -128,6 +128,34 @@ margins:
   # lmms-eval reports holds only for a one-sentence prompt (B3 nocaps_like: 105.6).
   base_cider_band: [0.0, 1.0]
   base_spice_band: [15.0, 17.0]
+
+detectors:
+  # B6 (Minho; reassigned from Kaustav 2026-10-26). Definitions: contam.eval.detectors, prereg Section 7.
+  # Image subsets are drawn once per split (sample_seed), with the B1 exclusion applied, so every
+  # checkpoint is tested on the same images.
+  cdd:                   # Dong et al. 2024 defaults
+    alpha: 0.05
+    max_len: 100         # tokens (words); l = min(longest sample, max_len)
+    xi: 0.01             # "leaked" if Peak > xi
+  dcq:                   # Golchin & Surdeanu 2023
+    n_per_group: 300     # seen and unseen quiz items each
+    sample_seed: 20261026
+    max_new_tokens: 3
+    perturb_model: Qwen/Qwen2.5-7B-Instruct   # scripts/dcq_perturb.py; any HF chat LM
+    perturb_seed: 20261027
+    perturb_max_len_diff: 3                   # word-level: word count within 3 of the original
+  kds:                   # Choi et al. 2025 defaults
+    n_per_group: 1000    # one fine-tune per group (seen, unseen)
+    sample_seed: 20261028
+    lora_r: 8
+    lora_alpha: 32
+    lora_dropout: 0.1
+    target_modules: [q_proj, v_proj]
+    lr: 1.0e-4           # plain SGD
+    batch_size: 4
+    epochs: 1
+    seed: 0
+    embed_batch_size: 16
 
 stats:
   n_boot: 2000
