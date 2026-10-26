@@ -18,7 +18,7 @@ paths:
 
 models:
   main: llava-hf/llava-1.5-7b-hf          # D1 (Minho, 2026-10-25): B1 passed
-  fallback: HuggingFaceTB/SmolVLM-Instruct  # D6 candidate (Minho): pending the D6 audit, prereg Section 1
+  fallback: HuggingFaceTB/SmolVLM-Instruct  # D6 replication model (proposed, Minho 2026-10-26; docs/results/d6_audit.md)
   dtype: bfloat16
   # Token appended after every scored reference (teacher forcing). null -> tokenizer.eos_token.
   # For SmolVLM use "<end_of_utterance>". Must match the training target format (Minho).
