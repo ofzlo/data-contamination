@@ -12,7 +12,7 @@ proposal (`docs/CSE576_Project.pdf`): eq. 1 generation, eq. 2 group score, eq. 3
 | ID | Decision | Status |
 |----|----------|--------|
 | D1 | Main model: LLaVA-1.5-7B if the B1 audit passes, otherwise SmolVLM-2.2B. | **LLaVA-1.5-7B** (Minho, 2026-10-25). B1 passed: no NoCaps reference in its training text; 20 val images (0.44%) are COCO / VG photos it trained on, excluded from analysis (Section 2). `docs/results/b1_audit.md` |
-| D2 | Fixed total examples M per run; exposed K = N_exp × d replace general examples. M, N_exp from the W1 timing run (300k / 2,250 or 130k / 1,000). | TODO(Minho) |
+| D2 | Fixed total examples M per run; exposed K = N_exp × d replace general examples. M, N_exp from the W1 timing run (300k / 2,250 or 130k / 1,000). | **M = 130,000, N_exp = 1,000** (decided 2026-10-26). Timing on one A100 80GB: 3.15 examples/s with micro-batch 16 × accumulation 8 = 128, length-sorted micro-batches and gradient checkpointing. That is ≈11.6 GPU-h per run (1,016 optimizer steps). `outputs/timing/`, `docs/progress/yoorhim_2026-10-26.md` Section 3.5 |
 | D3 | Caption condition: fixed text-only template. Image condition: the base model's own caption as target. Captioning prompt p_cap. | **Locked** (Minho, 2026-10-25): p_cap = "Describe the image in detail."; Caption = the same text with no image; Image = the untrained base model's T=0 caption under p_cap. SPICE held-out is a co-primary A metric (Section 7) |
 | D4 | SameDist: COCO train captions (no eval-image overlap), matched to NoCaps in count, length and total K. | **Signed off** (Minho, 2026-10-25) after the B1 rebuild (Section 2); Paired format (COCO image + p_cap) |
 | D5 | Decision margins, defined exactly in Section 4. | Drafted here (Yoorhim) |
@@ -223,8 +223,8 @@ classifier (not built yet).
   length-sorted inside each optimizer step, which holds the same examples as without sorting.
   This deviates from LLaVA-1.5, which takes a mean of per-device token means and uses
   `group_by_modality_length` (`training.loss_normalization`, `training.micro_batch_order`; both are
-  in the training config hash). Proposed by Yoorhim. TODO(team): sign off before G0. It must not
-  change between runs.
+  in the training config hash). Proposed by Yoorhim. **Adopted 2026-10-26, before G0**, with
+  micro-batch 16 × accumulation 8 = 128 and gradient checkpointing. It must not change between runs.
 - **Rank** of the training reference among all 10 by summed log p. Rank 1 is the most likely. Ties
   do not count against the training reference.
 - **RMI** (Section "Shared metrics" of the plan):
