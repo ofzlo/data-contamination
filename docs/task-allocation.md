@@ -13,7 +13,7 @@ everything about detectors.
 |---|---|---|
 | W1 | Timing run (~1k steps) for GPU-h per run, then fix M and N_exp (D2) | ○ runbook in README; needs the cluster |
 | W1 | Splits and seed scheme (D7); lock SameDist (D4); start G0 training (d=0 × 5 seeds) | ✓ D7, D4; ○ G0 (after D2) |
-| W1 | (K) B1 training-data audit; choose the main and replication models (D1, D6) | ✓ B1, D1 (LLaVA-1.5-7B); ◐ D6: `scripts/d6_audit.py` |
+| W1 | (K) B1 training-data audit; choose the main and replication models (D1, D6) | ✓ B1, D1 (LLaVA-1.5-7B); ✓ D6 audit (`docs/results/d6_audit.md`), SmolVLM-2.2B proposed, needs team sign-off |
 | W1 | (K) Write the B3 prompts | ✓ locked 2026-10-26 (`configs/prompts.yaml`, prereg Section 7) |
 | W2–W4 | (K) Implement DCQ, CDD, KDS (B6); run on base, d=0 and G1 | ◐ code and tests done (`contam.eval.detectors`, `scripts/run_detectors.py`); runs need T=1 samples and the d=0 checkpoints |
 | W3 | Train G1 pilot (12 runs) | ○ |
