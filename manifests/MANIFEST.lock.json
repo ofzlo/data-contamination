@@ -33,16 +33,6 @@
   }
  },
  "files": {
-  "samedist_A.json": {
-   "sha256": "277d997b8b7f05a650cd1ceaaaf84a8c5367d4ad842e8c503347dabaad2bfbeb",
-   "content_hash": "3c8c96c1e9bc2e8309c59d1224dfdaafe48b51d5f451e31bd36b440f83592e7b",
-   "annotations_hash": "37f675f406250984355bae41bb83d904a0df4a8b556806167f9542efb4ff0bab"
-  },
-  "samedist_B.json": {
-   "sha256": "c10236dd0a47347d1e131024fa41617402fd4a6c4b4a06bbbd2d0244e1e1a811",
-   "content_hash": "5b386c7cfbf75a8648ff4438400bc93b30cec9de92c4b880f98dde6f189f5836",
-   "annotations_hash": "37f675f406250984355bae41bb83d904a0df4a8b556806167f9542efb4ff0bab"
-  },
   "split_A.json": {
    "sha256": "5edff633cc5e95490c6c3a9993b9f48793271eab8e479673e8b2905bfc7138b2",
    "content_hash": "7b1f1ad80182d88b6ae0735fba9a1e74357289b055f184eea275b645dfebea21",
@@ -52,6 +42,32 @@
    "sha256": "0075c6edaa93769a294120223f39a48468d9c1a49e4e9e50e958aa33a429eeac",
    "content_hash": "c29202cabb4dc56e78bbefb88059088f678c02f4b65e51ee3b3a9b2c5387bfa1",
    "annotations_hash": "37f675f406250984355bae41bb83d904a0df4a8b556806167f9542efb4ff0bab"
+  },
+  "general_order.jsonl": {
+   "sha256": "c43f390de60f0f77ead0677a91b378ba5a449b2832e8717807690b7b1818f8d8",
+   "added_at": "2026-10-24T22:17:54+00:00"
+  },
+  "samedist_A.json": {
+   "sha256": "7318505f0ea9ac3331a5d97f6a6c1517992edc16521515f220d12a346bf92551",
+   "content_hash": "a13ef0c474da37be668c6982f3e2efaa632e52e002970fe8e4dda9b4d31b1b77",
+   "annotations_hash": "37f675f406250984355bae41bb83d904a0df4a8b556806167f9542efb4ff0bab",
+   "added_at": "2026-10-24T22:17:54+00:00"
+  },
+  "samedist_B.json": {
+   "sha256": "0e01344f2a425e489864eb87022e2b76f6d2c97403b4f75dfe1a6775df6750cb",
+   "content_hash": "33ddd7ae36e0672d5cf15fadcf5d16fdcf2679da5b2914ca1d6c674de1158833",
+   "annotations_hash": "37f675f406250984355bae41bb83d904a0df4a8b556806167f9542efb4ff0bab",
+   "added_at": "2026-10-24T22:17:54+00:00"
   }
- }
+ },
+ "amendments": [
+  {
+   "date": "2026-10-25",
+   "change": "samedist_A.json and samedist_B.json unfrozen and rebuilt without the 13 COCO train2017 images that are NoCaps val photos (B1 audit, docs/results/b1_audit.md); approved by Minho",
+   "old_sha256": {
+    "samedist_A.json": "277d997b8b7f05a650cd1ceaaaf84a8c5367d4ad842e8c503347dabaad2bfbeb",
+    "samedist_B.json": "c10236dd0a47347d1e131024fa41617402fd4a6c4b4a06bbbd2d0244e1e1a811"
+   }
+  }
+ ]
 }

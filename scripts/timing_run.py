@@ -20,6 +20,15 @@
    overhead; G0 (5 runs + 6 evaluated checkpoints) and P0 (~98 runs + their checkpoints and the
    base) at EVAL_GPU_H_PER_CKPT (docs/results/w1_base_b3.md, T=0 + teacher forcing, no T=1).
 
+Exposure (``--exposure-d``): the d>0 cell of a run with M examples and N_exp exposed images
+replaces the tail of the sample with exposed examples (``contam.data.exposure``, split A by
+default) at the run's share K/M = N_exp x d / M, so the timed mix is that run's mix. The exposed
+rows are taken round-robin (every image once, then again), and their images must be readable
+under paths.llava_images (``nocaps/`` -> the NoCaps images; ``coco/`` is the 665K COCO folder).
+
+Repeats (``--repeat r``): an independent timing run with seed slot r (its own data order and
+run dir), for the spread of the steady-state step time. ``scripts/d2_summary.py`` pools them.
+
 Resumable: probe results and the trainer's checkpoints are reused; rerun the same command. Exits 75
 if stopped by SIGTERM / SIGUSR1 / SIGHUP. Writes outputs/timing/timing_report.{json,txt} and the
 sample (outputs/timing/sample_n{n}.json); trainer checkpoints go under <paths.ckpt_dir>/timing/.
@@ -27,6 +36,7 @@ sample (outputs/timing/sample_n{n}.json); trainer checkpoints go under <paths.ck
 Examples:
     python scripts/timing_run.py                         # n=4096, 30 steps
     python scripts/timing_run.py --sample-only --n 128   # just write a sample (GPU smoke data)
+    python scripts/timing_run.py --n 128000 --steps 1000 --exposure-d 64 --n-exp 1000 --M 130000 --repeat 1
 """
 
 from __future__ import annotations
@@ -113,6 +123,39 @@ def build_sample(cfg: dict, n: int, missing_mode: str, log=print) -> tuple[list[
             "sources_missing": sorted(s for s, v in by_source.items() if v["missing_on_disk"]),
             "sources_partial": sorted(s for s, v in by_source.items() if 0 < v["n_stand_in"] < v["n_sample"])}
     return examples, info
+
+
+def add_exposure(cfg: dict, examples: list[dict], info: dict, n: int, condition: str, d: int, n_exp: int, M: int, split_name: str) -> tuple[list[dict], dict]:
+    """Replace the tail of a general sample with the exposed examples of one (condition, d) cell."""
+    from contam.config import load_prompts
+    from contam.data.exposure import build_exposure
+    from contam.data.nocaps import load_annotations
+
+    K = n_exp * d
+    if not 0 < K < M:
+        raise SystemExit(f"K = n_exp x d = {K} must be in 1..M-1 (M={M})")
+    n_exposed = round(n * K / M)
+    splits = Path(cfg["paths"]["splits_dir"])
+    split = read_json(splits / f"split_{split_name}.json")
+    ex = build_exposure(condition, split, load_annotations(cfg["paths"]["annotations"]), n_exp, d, load_prompts(),
+                        shuffle_seed=cfg["exposure"]["shuffle_seed"],
+                        samedist=read_json(splits / f"samedist_{split_name}.json") if condition == "samedist" else None)
+    if condition == "image":
+        raise SystemExit("the image condition needs base-model captions; time paired instead (same images, similar length)")
+    rows = ex["rows"]
+    picked = [rows[k % len(rows)] for k in range(min(n_exposed, len(rows) * d))]  # round-robin: every image once, then again
+    root = Path(cfg["paths"]["llava_images"])
+    imgs = sorted({r["image"] for r in picked if r.get("image")})
+    with ThreadPoolExecutor(16) as pool:
+        bad = [p for p, ok in zip(imgs, pool.map(lambda p: _readable(root / p), imgs)) if not ok]
+    if bad:
+        raise SystemExit(f"{len(bad)} exposed images are missing under {root}, e.g. {bad[0]}; for NoCaps: ln -s <paths.images_dir> {root / 'nocaps'}")
+    exposed = [{"id": r["id"], "image": r.get("image"), "conversations": r["conversations"], "source": f"exposed_{condition}"} for r in picked]
+    exposed = [{k: v for k, v in e.items() if v is not None} for e in exposed]
+    out = examples[: n - len(exposed)] + exposed
+    info = {**info, "n": n, "exposure": {"condition": condition, "d": d, "n_exp": n_exp, "M": M, "K": K, "share": round(K / M, 4), "split": split_name,
+                                         "n_exposed_in_sample": len(exposed), "n_general_in_sample": n - len(exposed), "exposure_hash": ex["content_hash"]}}
+    return out, info
 
 
 # ----------------------------------------------------------------------------- probe (subprocess)
@@ -226,6 +269,11 @@ def text_report(rep: dict) -> str:
     for src, v in s["by_source"].items():
         lines.append(f"  {src:8s} {v['share_665k']:10.3f} {v['share_sample']:7.3f} {v['n_sample']:5d} {v['n_stand_in']:8d}")
     lines.append(f"  sources missing on disk: {s['sources_missing'] or 'none'}; partly on disk: {s['sources_partial'] or 'none'}")
+    if s.get("exposure"):
+        e = s["exposure"]
+        lines.append(f"  exposure: {e['condition']} (split {e['split']}), N_exp {e['n_exp']} x d {e['d']} = K {e['K']:,} of M {e['M']:,} "
+                     f"(share {e['share']:.3f}); sample {e['n_exposed_in_sample']} exposed + {e['n_general_in_sample']} general")
+    lines.append(f"  repeat {rep['args']['repeat']} (seed slot {rep['args']['repeat']})")
     lines += ["", "Micro-batch probe (worst case: every example max_len tokens with an image):"]
     for p in rep["probes"]:
         lines.append(f"  micro {p['micro_batch_size']:2d}: " + (f"fits, peak {p['peak_allocated_gib']:.1f} GiB allocated / {p['peak_reserved_gib']:.1f} reserved of {p['total_gib']:.0f}" if p["fit"] else "OOM"))
@@ -234,7 +282,7 @@ def text_report(rep: dict) -> str:
               f"  {t['examples_per_s']:.2f} examples/s, {t['tokens_per_s']:.0f} tokens/s ({t['tokens_per_example']:.0f} tokens/example incl. image tokens), "
               f"{t['step_time_s_mean']:.1f} +- {t['step_time_s_sd']:.1f} s/step, peak {t['peak_mem_gib']:.1f} GiB",
               f"  checkpoint save {t['checkpoint_save_s']:.1f} s; fixed start/finish overhead {t['overhead_s']:.0f} s", "",
-              f"Projection (1 x A100 80GB; eval {EVAL_GPU_H_PER_CKPT} GPU-h/checkpoint, T=0 + teacher forcing, no T=1 samples):"]
+              f"Projection (1 x {rep['gpu']}; eval {EVAL_GPU_H_PER_CKPT} GPU-h/checkpoint, T=0 + teacher forcing, no T=1 samples):"]
     for M, v in rep["projection"].items():
         lines.append(f"  M={int(M):,}: {v['gpu_h_per_run']:.1f} GPU-h/run ({v['optimizer_steps']} steps); "
                      f"G0 {v['G0']['train_gpu_h']:.0f} train + {v['G0']['eval_gpu_h']:.0f} eval = {v['G0']['total_gpu_h']:.0f} GPU-h; "
@@ -253,6 +301,12 @@ def main(argv=None) -> None:
     ap.add_argument("--micro-sizes", default=",".join(map(str, MICRO_SIZES)))
     ap.add_argument("--out", default=None, help="report dir (default <outputs_dir>/timing)")
     ap.add_argument("--sample-only", action="store_true", help="write the sample and exit")
+    ap.add_argument("--repeat", type=int, default=0, help="repeat index r: seed slot r, own run dir (independent repeats for the spread)")
+    ap.add_argument("--exposure-d", type=int, default=0, help="time the d>0 cell: replace the sample tail with exposed examples at share N_exp x d / M")
+    ap.add_argument("--exposure-condition", default="paired", choices=["paired", "caption", "shuffled", "samedist"])
+    ap.add_argument("--n-exp", type=int, default=1000, help="exposed images (D2)")
+    ap.add_argument("--M", type=int, default=130000, help="examples per run (D2), sets the exposure share")
+    ap.add_argument("--split", default="A")
     ap.add_argument("--probe", type=int, default=None, help=argparse.SUPPRESS)  # internal: one probe in this process
     ap.add_argument("--sample", default=None, help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
@@ -268,12 +322,19 @@ def main(argv=None) -> None:
         raise SystemExit(f"--out {out} is inside the splits dir {splits}; frozen-pattern files must never be written there")
     out.mkdir(parents=True, exist_ok=True)
     tag = f"n{args.n}_{args.missing}"
+    if args.exposure_d:
+        tag += f"_{args.exposure_condition}{args.split}_nexp{args.n_exp}_d{args.exposure_d}_M{args.M}"
     sample_path, info_path = out / f"sample_{tag}.json", out / f"sample_{tag}.info.json"
     assert not any(p in sample_path.name for p in FROZEN_PATTERNS)
     if not sample_path.exists():
         examples, info = build_sample(cfg, args.n, args.missing)
+        if args.exposure_d:
+            examples, info = add_exposure(cfg, examples, info, args.n, args.exposure_condition, args.exposure_d, args.n_exp, args.M, args.split)
         write_json(examples, sample_path, indent=None)
         write_json(info, info_path)
+    if not 0 <= args.repeat < len(cfg["training"]["seeds"]):
+        raise SystemExit(f"--repeat {args.repeat}: needs a training seed slot (0..{len(cfg['training']['seeds']) - 1})")
+    tag += f"_r{args.repeat}"
     info = read_json(info_path)
     print(json.dumps({k: v for k, v in info.items() if k != "by_source"}), flush=True)
     if args.sample_only:
@@ -316,7 +377,7 @@ def main(argv=None) -> None:
         done = tlog.exists() and sum(1 for _ in open(tlog)) >= args.steps
         if not done:
             t0 = time.time()
-            rc, text = _run([py, str(REPO_ROOT / "scripts/train_lora.py"), *cfg_args, "--data", str(sample_path), "--seed-slot", "0", "--run-id", f"timing_{run_tag}_mbs{m}",
+            rc, text = _run([py, str(REPO_ROOT / "scripts/train_lora.py"), *cfg_args, "--data", str(sample_path), "--seed-slot", str(args.repeat), "--run-id", f"timing_{run_tag}_mbs{m}",
                              "--out-dir", str(run_dir), "--micro-batch-size", str(m), "--max-steps", str(args.steps), "--skip-manifest-check", "--allow-missing-images"], log_path)
             if rc == EXIT_PREEMPTED or Stop.sig:
                 print(f"stopped ({Stop.sig or 'trainer preempted'}); rerun to resume", flush=True)

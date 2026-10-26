@@ -40,6 +40,16 @@ splits:
   A: {split_seed: 20261019, ref_seed: 20261020}   # explore
   B: {split_seed: 20261119, ref_seed: 20261120}   # confirm (G3)
 
+analysis:
+  # B1 audit (docs/results/b1_audit.md): 20 NoCaps val images are the same photos as COCO train2017 /
+  # Visual Genome images in LLaVA-1.5's training data. They stay in the frozen splits but are left
+  # out of S / A / V group means; a robustness check reports the results with them.
+  exclude_image_ids_file: docs/results/b1_overlap_nocaps_image_ids.txt
+
+exposure:
+  # Shuffled condition: seed of the caption derangement over the exposed images (contam.data.exposure).
+  shuffle_seed: 20261023
+
 samedist:
   # D4: tie-break seed for picking COCO captions inside a length bucket (contam.data.samedist).
   seed: 20261021
@@ -110,9 +120,14 @@ margins:
     rmi_sum: 0.5     # nats, summed caption log-prob  (PLACEHOLDER)
     rmi_norm: 0.02   # nats per token                 (PLACEHOLDER)
   a_metric: cider_heldout
-  # G0 sanity: untrained base CIDEr (x100, all 10 refs, all images) warning band.
-  # lmms-eval reports roughly 105 for llava-1.5-7b on NoCaps val with a one-sentence caption prompt. VERIFY.
-  base_cider_band: [95.0, 115.0]
+  # D3 (2026-10-25): with the long-form p_cap, CIDEr-D held-out carries the S effect (B3,
+  # docs/results/w1_base_b3.md), so SPICE held-out is a co-primary A metric (prereg Section 7).
+  a_metric_coprimary: spice_heldout
+  # G0 sanity bands for the untrained base under p_cap "Describe the image in detail." (x100, all 10
+  # refs, all images). B3 "verbose" (same text): CIDEr all10 0.001, SPICE all10 16.01. The ~105 that
+  # lmms-eval reports holds only for a one-sentence prompt (B3 nocaps_like: 105.6).
+  base_cider_band: [0.0, 1.0]
+  base_spice_band: [15.0, 17.0]
 
 stats:
   n_boot: 2000

@@ -1,9 +1,14 @@
 # Prompt wording is owned by Kaustav (D3 / B3). Entries marked PLACEHOLDER are not final.
 # `caption` is the fixed captioning prompt p_cap (eq. 1) used for generation AND teacher-forced scoring.
+# D3 locked 2026-10-25 (Minho, prereg Section 1): p_cap is long-form on purpose (style effects need a
+# long-form default); the Caption condition uses the same text with no image.
 prompts:
   caption:
-    text: "Describe the image."   # PLACEHOLDER (p_cap; Kaustav to lock). Neutral on purpose: style effects need a long-form default.
-    placeholder: true
+    text: "Describe the image in detail."
+    placeholder: false
+  caption_text:
+    text: "Describe the image in detail."   # D3: Caption condition = p_cap text, no image (Paired and Caption differ only in the image)
+    placeholder: false
   neutral:
     text: "Describe the image."                          # PLACEHOLDER
     placeholder: true
@@ -11,7 +16,7 @@ prompts:
     text: "Describe the image in one short sentence."
     placeholder: false
   verbose:
-    text: "Describe the image in detail."                # PLACEHOLDER
+    text: "Describe the image in detail."                # PLACEHOLDER; same text as p_cap since D3
     placeholder: true
 
 b3:

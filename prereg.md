@@ -11,12 +11,12 @@ proposal (`docs/CSE576_Project.pdf`): eq. 1 generation, eq. 2 group score, eq. 3
 
 | ID | Decision | Status |
 |----|----------|--------|
-| D1 | Main model: LLaVA-1.5-7B if the B1 audit passes, otherwise SmolVLM-2.2B. | TODO(Kaustav): B1 audit result |
+| D1 | Main model: LLaVA-1.5-7B if the B1 audit passes, otherwise SmolVLM-2.2B. | **LLaVA-1.5-7B** (Minho, 2026-10-25). B1 passed: no NoCaps reference in its training text; 20 val images (0.44%) are COCO / VG photos it trained on, excluded from analysis (Section 2). `docs/results/b1_audit.md` |
 | D2 | Fixed total examples M per run; exposed K = N_exp × d replace general examples. M, N_exp from the W1 timing run (300k / 2,250 or 130k / 1,000). | TODO(Minho) |
-| D3 | Caption condition: fixed text-only template. Image condition: the base model's own caption as target. Captioning prompt p_cap. | TODO(Kaustav): templates and p_cap wording (`configs/prompts.yaml`, currently PLACEHOLDER) |
-| D4 | SameDist: COCO train captions (no eval-image overlap), matched to NoCaps in count, length and total K. | Built and frozen per Section 2 (`samedist_{A,B}.json`); TODO(Kaustav): sign off, and D3 decides the example format |
+| D3 | Caption condition: fixed text-only template. Image condition: the base model's own caption as target. Captioning prompt p_cap. | **Locked** (Minho, 2026-10-25): p_cap = "Describe the image in detail."; Caption = the same text with no image; Image = the untrained base model's T=0 caption under p_cap. SPICE held-out is a co-primary A metric (Section 7) |
+| D4 | SameDist: COCO train captions (no eval-image overlap), matched to NoCaps in count, length and total K. | **Signed off** (Minho, 2026-10-25) after the B1 rebuild (Section 2); Paired format (COCO image + p_cap) |
 | D5 | Decision margins, defined exactly in Section 4. | Drafted here (Yoorhim) |
-| D6 | Replication model: SmolVLM-2.2B or Molmo-7B-O, whichever is not the main model. | TODO(Kaustav) |
+| D6 | Replication model: SmolVLM-2.2B or Molmo-7B-O, whichever is not the main model. | TODO(Kaustav): SmolVLM's `localized_narratives` (Open Images) needs the B1 image check first; Molmo-7B-O is the default until then |
 | D7 | Separate training, split and reference-assignment seeds. Split A = explore, split B = confirm. | Seeds set in Section 2 (Minho); manifests frozen in `manifests/MANIFEST.lock.json` |
 
 ## 2. Data, splits and seeds (D7)
@@ -46,14 +46,26 @@ proposal (`docs/CSE576_Project.pdf`): eq. 1 generation, eq. 2 group score, eq. 3
   - General-pool order (`training.general_seed = 20261022`): LLaVA-665K is put in one fixed order
     with its sources interleaved, so every prefix keeps the 665K source mix. A run with K exposed
     examples trains on the first M − K general examples plus the K exposed ones; d=0 trains on the
-    first M. B1 exclusions are applied before this order is frozen.
+    first M. B1 exclusions are applied before this order is frozen: the 38 examples on the 21 665K
+    images that are NoCaps val photos (`docs/results/b1_exclude_665k_images.txt`) are dropped, leaving
+    665,260. Frozen 2026-10-25, order sha256 `c43f390de60f…`.
 - **SameDist (D4).** `contam.data.samedist`: one COCO train2017 caption per seen image, with the
   same word count as that image's training reference (`contam.eval.style.words`). Each COCO image
   is used once; ties inside a length bucket are broken by sha256 of (`samedist.seed = 20261021`,
   annotation id). Rows are assigned smallest exposure set first, so SameDist sets nest like the
   exposure sets, and the run builder repeats each row d times, so K matches. All 2,250 rows of both
   splits match length exactly, and the total word count equals that of the training references.
-  Current hashes: SameDist A `3c8c96c1e9bc…`, SameDist B `5b386c7cfbf7…`.
+  Rebuilt 2026-10-25 without the 13 COCO train2017 images that are NoCaps val photos (B1;
+  `--exclude-coco-ids docs/results/b1_exclude_coco_ids.txt`): 106 rows of A and 109 of B changed,
+  still 2,250 / 2,250 exact. Hashes: SameDist A `a13ef0c474da…`, SameDist B `33ddd7ae36e0…`
+  (the first frozen versions, `3c8c96c1e9bc…` / `5b386c7cfbf7…`, held one such image; nothing had
+  trained on them). The lock records the unfreeze under `amendments`.
+- **B1 analysis exclusion.** 20 NoCaps val images are the same Flickr photos as COCO train2017 or
+  Visual Genome images that LLaVA-1.5 trained on (`docs/results/b1_overlap_nocaps_image_ids.txt`;
+  9 seen in split A, 8 in split B, none in the shared 3.125% set). They stay in the frozen splits and
+  are scored, but S / A / V group means and gate decisions leave them out
+  (`analysis.exclude_image_ids_file`); a robustness check reports every result with them.
+  TODO(Yoorhim): apply the exclusion in the eval and gate code.
 - **Freezing.** `manifests/MANIFEST.lock.json` (tracked) holds the sha256 of every split, SameDist
   and general-order file and the seed config above. Every training and eval run checks it
   (`scripts/freeze_manifests.py --check`); a file can be added to the lock but never changed. Every
@@ -132,14 +144,19 @@ and robustness.
   unless `--allow-partial` is set, which is for smoke tests only.
 - **Group score** (eq. 2): S^g_{d,c} = mean over images i in I_g of m(ŷ_i, R_i).
 - **Sanity check.** The untrained base model's CIDEr (all10, all images) is compared with a warning
-  band, currently [95, 115] around the ≈105 that lmms-eval reports for LLaVA-1.5-7B on NoCaps val.
-  This is a warning band, not a hard pass/fail.
+  band. With the locked long-form p_cap the bands are CIDEr all10 [0, 1] and SPICE all10 [15, 17]
+  (B3 "verbose", the same text: CIDEr 0.001, SPICE 16.01). This is a warning band, not a hard pass/fail.
   - W1 check (2026-10-21, split A, all 4,500 images, T=0). The ≈105 holds only for a one-sentence
     prompt. "Describe the image in one short sentence." gives CIDEr 105.6, matching lmms-eval.
     The current p_cap placeholder, "Describe the image.", gives CIDEr 0.003: base captions average
     72.6 words, and CIDEr-D's Gaussian length penalty (σ = 6) zeroes them. SPICE (held-out) is
     16.29 for both prompts. Details: `docs/results/w1_base_b3.md`.
-  - TODO(team): the band must be set for the locked p_cap. With a long-form p_cap the band is ≈0.
+  - Set 2026-10-25 for p_cap "Describe the image in detail." (above). The G0 base outputs under the
+    old placeholder ("Describe the image.": `outputs/g0/base_caption.jsonl`, `base_metrics*.json`,
+    `outputs/logprobs/base.jsonl`) no longer match p_cap and must be redone (generation, teacher-forced
+    scoring and metrics, ~1.7 GPU-h). The B3 "verbose" rows of `outputs/b3/base.jsonl` already hold base
+    T=0 captions for this exact text; `contam.data.exposure` selects Image-condition targets by prompt
+    sha, so they can serve as those targets until the G0 base run is redone.
 - **G4 metrics** (counterfactual references, CLIPScore, LLM judge, human pairwise) are out of scope
   for this draft.
 
@@ -434,7 +451,8 @@ reading implemented in `scripts/gate_report.py`.
      held-out does not (Δ −0.00 [−0.21, +0.21]). So SPICE held-out is the candidate
      (`docs/results/w1_base_b3.md`).
   2. Use a one-sentence p_cap. This removes most of the length-driven S signal that RQ1 relies on.
-  Decide before G1.
+  **Decided 2026-10-25 (Minho): option 1**, with p_cap "Describe the image in detail." (D3). SPICE
+  held-out is a co-primary A metric (`margins.a_metric_coprimary`) next to CIDEr held-out.
 
 ## Amendments
 
