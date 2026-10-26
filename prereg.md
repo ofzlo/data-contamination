@@ -29,7 +29,9 @@ proposal (`docs/CSE576_Project.pdf`): eq. 1 generation, eq. 2 group score, eq. 3
   - Surrounding whitespace is stripped.
   - A trailing "¬" (U+00AC, an annotation-tool artifact on 458 references) is removed. The three
     references with "¬" mid-caption are left unchanged.
-  - TODO(Minho): training targets must use these same normalized references.
+  - Training targets use these same normalized references (Minho, 2026-10-26):
+    `contam.data.exposure.build_exposure` reads them from `annotations.json`, and
+    `check_annotations` refuses annotations whose hash differs from the split's.
   - Normalization changes the annotations hash, and so the split content hashes.
     Current hashes: split A `7b1f1ad80182…`, split B `c29202cabb4d…`.
 - **Caption normalization before PTB.** Every hypothesis and reference has each Unicode whitespace
@@ -209,7 +211,7 @@ classifier (not built yet).
 - **Which tokens count.** Log-probabilities are summed over the caption tokens plus the end token.
   Prompt, BOS and image tokens are masked. Including the end token means a reference counts as
   likely only if the model would also stop after it.
-  - TODO(Minho): the training target format must use the same separator and end token.
+  - The training target format uses the same separator and end token (Minho, 2026-10-26).
     Implemented in `contam.train.build_example`: a one-turn (p_cap, ref) training example is token
     for token the scored sequence, with the loss on exactly the scored positions (tested with the
     real llava-hf processor and the 7B model). No system prompt. Multi-turn examples join turns as
