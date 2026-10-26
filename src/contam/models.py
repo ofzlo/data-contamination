@@ -100,8 +100,11 @@ class HFVLM:
 
     # ------------------------------------------------------------------ teacher forcing
 
-    def score(self, images: Sequence, prompt: str, refs: Sequence[str]) -> tuple[np.ndarray, np.ndarray]:
-        """Summed log p of each ``refs[k]`` (+ end token) given ``images[k]`` and ``prompt``."""
+    def _teacher_forced_inputs(self, images: Sequence, prompt: str, refs: Sequence[str]):
+        """Model inputs for ``prefix + " " + ref`` + end token, and each row's (prompt, full) lengths.
+
+        Row i's caption tokens are ``input_ids[i, plen[i]:flen[i]]`` and its end token sits at ``flen[i]``.
+        """
         torch = self.torch
         pre = self.prefix(prompt)
         full_texts = [f"{pre} {r.strip()}" for r in refs]
@@ -125,8 +128,11 @@ class HFVLM:
         inputs["input_ids"], inputs["attention_mask"] = ids2, am2
         inputs = {k: v.to(self.device) for k, v in inputs.items()}
         inputs["pixel_values"] = inputs["pixel_values"].to(self.model.dtype)
-        # Logits are recomputed in fp32 from the final hidden state (the lm_head input) so that
-        # teacher-forced log-probs are not rounded to bf16.
+        return inputs, plen, flen
+
+    def _final_hidden(self, inputs):
+        """Final-layer hidden states (the lm_head input, after the last norm) for ``inputs``."""
+        torch = self.torch
         head = self.model.get_output_embeddings()
         captured = {}
         hook = head.register_forward_hook(lambda mod, args, out: captured.__setitem__("h", args[0]))
@@ -135,7 +141,17 @@ class HFVLM:
                 self.model(**inputs)
         finally:
             hook.remove()
-        hidden = captured["h"]
+        return captured["h"]
+
+    def score(self, images: Sequence, prompt: str, refs: Sequence[str]) -> tuple[np.ndarray, np.ndarray]:
+        """Summed log p of each ``refs[k]`` (+ end token) given ``images[k]`` and ``prompt``."""
+        torch = self.torch
+        inputs, plen, flen = self._teacher_forced_inputs(images, prompt, refs)
+        B = len(refs)
+        # Logits are recomputed in fp32 from the final hidden state (the lm_head input) so that
+        # teacher-forced log-probs are not rounded to bf16.
+        head = self.model.get_output_embeddings()
+        hidden = self._final_hidden(inputs)
         w32 = head.weight.float()
         b32 = head.bias.float() if getattr(head, "bias", None) is not None else None
         logp = np.zeros(B)
@@ -149,6 +165,13 @@ class HFVLM:
                 logp[i] = float(lp.gather(1, tgt[:, None]).sum())
                 ntok[i] = e + 1 - s
         return logp, ntok
+
+    def embed(self, images: Sequence, prompt: str, refs: Sequence[str]) -> np.ndarray:
+        """Sample embeddings for KDS (``contam.eval.detectors``): the mean final-layer hidden state over
+        the caption tokens and the end token of ``prefix + " " + refs[k]``, the positions ``score`` scores."""
+        inputs, plen, flen = self._teacher_forced_inputs(images, prompt, refs)
+        hidden = self._final_hidden(inputs)
+        return np.stack([hidden[i, int(plen[i]) : int(flen[i]) + 1].float().mean(0).cpu().numpy() for i in range(len(refs))])
 
 
 def load_lora(model, adapter: str, merge: bool = True):

@@ -69,10 +69,12 @@ See [`docs/`](docs/) for the full proposal and experiment plan.
 
 | Member | Role |
 |--------|------|
-| Minho Chung | Training runs, go/no-go calls |
+| Minho Chung | Training runs, go/no-go calls; since 2026-10-26 also model choice, condition formats and detectors |
 | Yoorhim Cho | Evaluation, metrics, gate verdicts |
-| Kaustav Chanda | Model choice, condition formats, detectors |
+| Kaustav Chanda | Model choice, condition formats, detectors (reassigned to Minho on 2026-10-26) |
 | Injoh Tanwani | Reference sets, metric sensitivity, paper support |
+
+Who does what, week by week: [`docs/task-allocation.md`](docs/task-allocation.md).
 
 ## Repository layout
 
@@ -167,3 +169,20 @@ python scripts/b3_prompt_intervention.py {generate,evaluate} --split data/splits
 ```
 
 Use `python -m contam.generate --temperature 1` to get T=1 samples. Definitions and pass rules are in `prereg.md`.
+
+B6 detectors (Minho; protocol in prereg Section 7, settings under `detectors` in `configs/default.yaml`):
+
+```bash
+# CDD (CPU): T=0 captions + 20 T=1 samples per image of the same checkpoint
+python -m contam.generate --checkpoint-id G0_d0_s0 --adapter CKPT --split data/splits/split_A.json --temperature 1 --out outputs/gens/G0_d0_s0_t1.jsonl
+python scripts/run_detectors.py cdd --split data/splits/split_A.json --checkpoint-id G0_d0_s0 \
+    --greedy outputs/gens/G0_d0_s0.jsonl --samples outputs/gens/G0_d0_s0_t1.jsonl --out outputs/detectors/cdd_G0_d0_s0.json
+# DCQ (GPU): word-level perturbations once per split, then the quizzes per checkpoint
+python scripts/dcq_perturb.py --split data/splits/split_A.json --out outputs/detectors/dcq_perturbations_A.jsonl
+python scripts/run_detectors.py dcq --split data/splits/split_A.json --checkpoint-id G0_d0_s0 --adapter CKPT \
+    --perturbations outputs/detectors/dcq_perturbations_A.jsonl --out outputs/detectors/dcq_G0_d0_s0.json
+# KDS (GPU): embeddings before / after a short LoRA fine-tune on the seen and on the unseen subset
+python scripts/run_detectors.py kds --split data/splits/split_A.json --checkpoint-id G0_d0_s0 --adapter CKPT --out outputs/detectors/kds_G0_d0_s0.json
+# base + five d=0 seeds: per-checkpoint AUROC and the d=0 spread (null band)
+python scripts/run_detectors.py report --inputs outputs/detectors/*.json --d0-prefix G0_d0 --out outputs/detectors/b6_report.json
+```

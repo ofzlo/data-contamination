@@ -1,7 +1,10 @@
-# Prompt wording is owned by Kaustav (D3 / B3). Entries marked PLACEHOLDER are not final.
+# Prompt wording is owned by Minho (D3 / B3 / B6; reassigned from Kaustav 2026-10-26). All entries are locked.
 # `caption` is the fixed captioning prompt p_cap (eq. 1) used for generation AND teacher-forced scoring.
 # D3 locked 2026-10-25 (Minho, prereg Section 1): p_cap is long-form on purpose (style effects need a
 # long-form default); the Caption condition uses the same text with no image.
+# B3 locked 2026-10-26 (Minho, prereg Section 7): the three wordings that already have base results in
+# docs/results/w1_base_b3.md. verbose is p_cap itself, so a checkpoint's B3 verbose row is its main
+# T=0 generation (same prompt_sha).
 prompts:
   caption:
     text: "Describe the image in detail."
@@ -10,14 +13,19 @@ prompts:
     text: "Describe the image in detail."   # D3: Caption condition = p_cap text, no image (Paired and Caption differ only in the image)
     placeholder: false
   neutral:
-    text: "Describe the image."                          # PLACEHOLDER
-    placeholder: true
+    text: "Describe the image."              # no length or style cue
+    placeholder: false
   nocaps_like:
     text: "Describe the image in one short sentence."
     placeholder: false
   verbose:
-    text: "Describe the image in detail."                # PLACEHOLDER; same text as p_cap since D3
-    placeholder: true
+    text: "Describe the image in detail."    # = p_cap
+    placeholder: false
+  # B6 DCQ quiz (Golchin & Surdeanu 2023, adapted to an image). contam.eval.detectors.dcq_prompt
+  # fills {options} with the five lettered options; the answer is one letter, A to E.
+  dcq_quiz:
+    text: "Your task is to answer a multiple-choice quiz. One of the options A to D may be the exact caption written for this image in the NoCaps validation set; the others differ from it in a few words. Pick the option that matches the NoCaps caption word for word. If you do not know the dataset or the answer, pick E.\n{options}\nAnswer with one letter only."
+    placeholder: false
 
 b3:
   prompt_ids: [neutral, nocaps_like, verbose]

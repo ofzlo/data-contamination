@@ -16,7 +16,7 @@ proposal (`docs/CSE576_Project.pdf`): eq. 1 generation, eq. 2 group score, eq. 3
 | D3 | Caption condition: fixed text-only template. Image condition: the base model's own caption as target. Captioning prompt p_cap. | **Locked** (Minho, 2026-10-25): p_cap = "Describe the image in detail."; Caption = the same text with no image; Image = the untrained base model's T=0 caption under p_cap. SPICE held-out is a co-primary A metric (Section 7) |
 | D4 | SameDist: COCO train captions (no eval-image overlap), matched to NoCaps in count, length and total K. | **Signed off** (Minho, 2026-10-25) after the B1 rebuild (Section 2); Paired format (COCO image + p_cap) |
 | D5 | Decision margins, defined exactly in Section 4. | Drafted here (Yoorhim) |
-| D6 | Replication model: SmolVLM-2.2B or Molmo-7B-O, whichever is not the main model. | TODO(Kaustav): SmolVLM's `localized_narratives` (Open Images) needs the B1 image check first; Molmo-7B-O is the default until then |
+| D6 | Replication model: SmolVLM-2.2B or Molmo-7B-O, whichever is not the main model. | TODO(Minho; reassigned from Kaustav 2026-10-26): `scripts/d6_audit.py` checks SmolVLM's The Cauldron `localized_narratives` against the Open Images validation narratives and Molmo's PixMo image URLs against the NoCaps Flickr ids. Molmo-7B-O is the default until both results are in (`docs/results/d6_audit.md`) |
 | D7 | Separate training, split and reference-assignment seeds. Split A = explore, split B = confirm. | Seeds set in Section 2 (Minho); manifests frozen in `manifests/MANIFEST.lock.json` |
 
 ## 2. Data, splits and seeds (D7)
@@ -437,10 +437,33 @@ reading implemented in `scripts/gate_report.py`.
 
 ## 7. Analysis-plan items not yet decided
 
-- TODO(Kaustav): B3 prompt wording for the neutral, nocaps_like and verbose prompts. Only
-  nocaps_like is final ("Describe the image in one short sentence.").
+- **B3 prompts. Decided 2026-10-26 (Minho; reassigned from Kaustav):** neutral "Describe the image.",
+  nocaps_like "Describe the image in one short sentence.", verbose "Describe the image in detail."
+  (= p_cap). These are the three wordings already run on the base model (`docs/results/w1_base_b3.md`),
+  so its B3 results stand; for a d=0 or exposed checkpoint the verbose row is its main T=0 generation.
 - TODO(Injoh): B2 counterfactual reference protocol, used for G4.
-- TODO(Kaustav): detector protocol (DCQ, CDD, KDS) and the false-positive controls.
+- **B6 detector protocol** (Minho, 2026-10-26; reassigned from Kaustav). Code: `contam.eval.detectors`,
+  `scripts/run_detectors.py`, settings `detectors` in `configs/default.yaml`.
+  - CDD (Dong et al. 2024): per-image peakedness of the 20 T=1 samples around the T=0 caption under
+    p_cap, word-level edit distance, α = 0.05, l capped at 100 words, "leaked" if Peak > ξ = 0.01.
+    All split images.
+  - DCQ (Golchin & Surdeanu 2023): five-option quizzes on the image (original = the image's
+    training reference, four word-level LLM perturbations from `scripts/dcq_perturb.py`, E = none);
+    BDQ for positional bias, BCQ at each of A to D; estimates = best BCQ accuracy over the
+    non-preferred positions (upper) and Cohen's κ (lower). 300 seen + 300 unseen images.
+  - KDS (Choi et al. 2025): RBF-kernel divergence of final-layer embeddings of (image, p_cap,
+    training reference) before and after a LoRA r 8 / one-epoch SGD fine-tune on the set itself,
+    median-heuristic γ. 1,000 seen and 1,000 unseen images, one fine-tune each.
+  - Every detector runs on seen and unseen images of split A, B1 exclusion applied; the per-image
+    (or per-set) score gives the seen-minus-unseen difference and the seen-vs-unseen AUROC with
+    image bootstrap CIs. Unseen images are the within-checkpoint control.
+  - False-positive controls: the untrained base and the five d=0 seeds (B6, W2 to W4), then
+    SameDist and the C3 counterstyle checkpoints (C9). On base and d=0 there is no exposure, so
+    the d=0 spread of each detector's AUROC (mean and SD across the five seeds, `run_detectors.py
+    report`) is its null band.
+  - Proposed rule for C9 (TODO(team): sign-off before G1 results): a detector flags a checkpoint if
+    the lower CI bound of its seen-vs-unseen AUROC exceeds the d=0 mean + 2 × SD across the five
+    seeds (the D5 convention). KDS is one number per set, so it is reported, not thresholded.
 - TODO(team): sign off on the single-primary G1(b) rule in Section 6, which settles the
   multiple-comparison question at G1. The same question is still open for G2's τ_style metric.
 - TODO(team, raised by Yoorhim after W1): CIDEr-D and a long-form p_cap. With the current p_cap,
