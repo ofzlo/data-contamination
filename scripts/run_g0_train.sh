@@ -2,10 +2,12 @@
 # G0 training: d=0 x 5 seeds, one after another, on one GPU (D2: M = 130,000; specs from
 # `python scripts/build_g0.py --M 130000`). Resumable: rerun the same command after a preemption or
 # a SLURM time limit; finished seeds are no-ops (DONE), an interrupted seed resumes from its last
-# checkpoint. Run from anywhere:
+# checkpoint. Several jobs can share the seeds: G0_SEEDS picks this job's seeds (default all five, in
+# order); a seed another job is training (run lock, exit 76) is skipped. Run from anywhere:
 #
 #   bash scripts/run_g0_train.sh                       # in an interactive GPU session (setsid nohup ...)
 #   sbatch scripts/run_g0_train.sh                     # batch: requeues itself on preemption / time limit
+#   G0_SEEDS="3 4" sbatch --export=ALL scripts/run_g0_train.sh   # a second job for seeds 3 and 4
 #
 #SBATCH -J g0_train
 #SBATCH -p public
@@ -24,7 +26,10 @@ REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$REPO"
 PY=${CONTAM_PY:-/scratch/$USER/envs/contam/bin/python}
 SPECS=${G0_SPECS:-outputs/runs/G0}
+CKPT=${CONTAM_CKPT_DIR:-data/ckpt}  # paths.ckpt_dir
+SEEDS=${G0_SEEDS:-0 1 2 3 4}
 EXIT_PREEMPTED=75
+EXIT_BUSY=76
 stamp() { echo "[$(date '+%F %T')] $*"; }
 
 child=0
@@ -38,7 +43,7 @@ trap 'forward HUP' HUP
 
 $PY -m contam.data.freeze --check || { stamp "manifest lock check failed"; exit 1; }
 
-for k in 0 1 2 3 4; do
+for k in $SEEDS; do
     spec="$SPECS/G0_d0_s$k.json"
     [ -f "$spec" ] || { stamp "missing $spec (run scripts/build_g0.py --M 130000)"; exit 1; }
     stamp "G0_d0_s$k: start"
@@ -56,10 +61,18 @@ for k in 0 1 2 3 4; do
             scontrol requeue "$SLURM_JOB_ID"
         fi
         exit "$EXIT_PREEMPTED"
+    elif [ "$rc" -eq "$EXIT_BUSY" ]; then
+        stamp "G0_d0_s$k: busy (another job is training it), skipping"
+        continue
     elif [ "$rc" -ne 0 ]; then
         stamp "G0_d0_s$k: FAILED (exit $rc)"
         exit "$rc"
     fi
     stamp "G0_d0_s$k: done"
 done
-stamp "G0 ALL DONE"
+done_seeds=(); open_seeds=()
+for k in 0 1 2 3 4; do
+    if [ -f "$CKPT/G0_d0_s$k/DONE" ]; then done_seeds+=("$k"); else open_seeds+=("$k"); fi
+done
+stamp "DONE seeds: ${done_seeds[*]:-none}; not DONE: ${open_seeds[*]:-none}"
+if [ "${#open_seeds[@]}" -eq 0 ]; then stamp "G0 ALL DONE"; else stamp "nothing left for this job (seeds: $SEEDS)"; fi

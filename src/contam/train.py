@@ -76,8 +76,10 @@ import os
 import random
 import shutil
 import signal
+import socket
 import threading
 import time
+import uuid
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -90,16 +92,22 @@ from contam.models import configure_processor, end_token_id, load_lora, turn_pre
 
 FORMAT_VERSION = 2
 EXIT_PREEMPTED = 75
+EXIT_BUSY = 76
 IGNORE = -100
 STOP_SIGNALS = ("SIGTERM", "SIGUSR1", "SIGHUP")
 # training-config keys that do not change the result (excluded from the config hash)
-NON_SEMANTIC = ("checkpoint_every_steps", "keep_checkpoints", "keep_checkpoints_after_done", "num_workers", "seeds", "general_seed")
+NON_SEMANTIC = ("checkpoint_every_steps", "keep_checkpoints", "keep_checkpoints_after_done", "num_workers", "seeds", "general_seed",
+                "run_lock_stale_s")
 LOSS_NORMALIZATIONS = ("per_example_mean", "token_mean_global", "micro_batch_mean")
 MICRO_BATCH_ORDERS = ("length_sorted", "random")
 
 
 class Preempted(Exception):
     """A stop signal (or ``stop_after_micro``) arrived; inside the training loop a checkpoint was saved."""
+
+
+class RunBusy(Exception):
+    """Another process holds the run lock of this out dir (or a trainer without the lock wrote to it recently)."""
 
 
 # ----------------------------------------------------------------------------- example format
@@ -510,6 +518,142 @@ def _versions() -> dict:
     return {"torch": torch.__version__, "transformers": transformers.__version__, "peft": peft.__version__}
 
 
+# ----------------------------------------------------------------------------- run lock
+# One trainer per out dir, also across nodes: /scratch is BeeGFS, so no fcntl / flock. ``RUN.lock`` is created with
+# O_CREAT | O_EXCL and its mtime is a heartbeat; it is taken over when it belongs to an earlier instance of this SLURM
+# job (another SLURM_RESTART_COUNT, heartbeat missed twice) or is stale (heartbeat and train logs older than
+# training.run_lock_stale_s). A trainer whose lock was taken over stops (RunBusy) before its next write. On release it is deleted and
+# ``RUN.released`` records a clean stop. A dir without a lock whose logs are fresh is busy (a trainer from before the
+# lock), unless the last trainer there released its lock or its CLI logged a preemption exit.
+
+RUN_LOCK, RUN_RELEASED = "RUN.lock", "RUN.released"
+LOCK_HEARTBEAT_S, LOCK_CONFIRM_S = 60.0, 2.0
+PREEMPT_LOG_MARK = f"checkpoint saved, exiting {EXIT_PREEMPTED}"  # last train.log line of a stopped scripts/train_lora.py
+
+
+def _read_lock_strict(path: Path) -> dict:
+    return json.loads(path.read_text())
+
+
+def _read_lock(path: Path) -> dict:
+    try:
+        return _read_lock_strict(path)
+    except (OSError, ValueError):
+        return {}
+
+
+def _restart(rec: dict) -> str:
+    return str(rec.get("slurm_restart_count") or 0)
+
+
+def _age(path: Path, now: float) -> float:
+    try:
+        return now - path.stat().st_mtime
+    except FileNotFoundError:
+        return math.inf
+
+
+def _owner(rec: dict) -> str:
+    return (f"host {rec.get('host')} pid {rec.get('pid')} SLURM job {rec.get('slurm_job_id')} (restart {rec.get('slurm_restart_count')}) "
+            f"since {rec.get('started_at')}")
+
+
+def _stopped_cleanly(out: Path) -> bool:
+    """No trainer wrote after the last lock release, or the CLI's last train.log line is a preemption exit."""
+    released, jsonl = out / RUN_RELEASED, out / "train_log.jsonl"
+    if released.exists() and (not jsonl.exists() or released.stat().st_mtime >= jsonl.stat().st_mtime - 1):
+        return True
+    try:
+        with open(out / "train.log", "rb") as f:
+            f.seek(max(0, f.seek(0, os.SEEK_END) - 4096))
+            tail = f.read().decode(errors="replace").rstrip("\n").rsplit("\n", 1)[-1]
+    except OSError:
+        return False
+    return PREEMPT_LOG_MARK in tail
+
+
+class RunLock:
+    """A held ``RUN.lock`` with its heartbeat thread; ``release()`` deletes it if it is still ours."""
+
+    def __init__(self, path: Path, rec: dict):
+        self.path, self.rec = path, rec
+        self.lost, self.thief = threading.Event(), {}  # set when the lock file names another owner
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._beat, name="run-lock-heartbeat", daemon=True)
+        self._thread.start()
+
+    def owned(self) -> bool:
+        return _read_lock(self.path).get("token") == self.rec["token"]
+
+    def _held(self, tries: int = 3) -> dict | None:
+        """The lock record, or None if it cannot be read (``tries`` attempts, 1 s apart)."""
+        for i in range(tries):
+            try:
+                return _read_lock_strict(self.path)
+            except (OSError, ValueError):
+                if i + 1 < tries:
+                    time.sleep(1)
+        return None
+
+    def _beat(self) -> None:
+        while not self._stop.wait(LOCK_HEARTBEAT_S):
+            held = self._held()
+            if held is not None and held.get("token") != self.rec["token"]:
+                self.thief = held
+                self.lost.set()
+                return
+            try:  # unreadable (transient) counts as still ours
+                os.utime(self.path)
+            except OSError:
+                pass
+
+    def release(self) -> None:
+        self._stop.set()
+        self._thread.join()
+        held = self._held()
+        if held is not None and held.get("token") == self.rec["token"]:
+            _write_json_atomic({**self.rec, "released_at": time.strftime("%Y-%m-%dT%H:%M:%S%z")}, self.path.with_name(RUN_RELEASED))
+            self.path.unlink(missing_ok=True)
+
+
+def acquire_run_lock(out: Path, stale_s: float) -> RunLock:
+    """Take ``out/RUN.lock`` or raise RunBusy (see the comment above)."""
+    path, now = out / RUN_LOCK, time.time()
+    rec = {"host": socket.gethostname(), "pid": os.getpid(), "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
+           "slurm_restart_count": os.environ.get("SLURM_RESTART_COUNT"), "started_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "token": uuid.uuid4().hex}
+    log_age = min(_age(out / "train.log", now), _age(out / "train_log.jsonl", now))
+    if not path.exists() and log_age <= stale_s and not _stopped_cleanly(out):
+        raise RunBusy(f"{out}: no {RUN_LOCK}, but its train log was written {log_age:.0f} s ago (a trainer without the run lock?)")
+    try:
+        os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644))
+    except FileExistsError:
+        try:
+            st = path.stat()
+        except FileNotFoundError:
+            raise RunBusy(f"{out}: {RUN_LOCK} was released while starting; rerun") from None
+        held, lock_age = _read_lock(path), now - st.st_mtime
+        requeued = (rec["slurm_job_id"] is not None and held.get("slurm_job_id") == rec["slurm_job_id"] and _restart(held) != _restart(rec)
+                    and lock_age > 2 * LOCK_HEARTBEAT_S)
+        if not requeued and (lock_age <= stale_s or log_age <= stale_s):
+            raise RunBusy(f"{out} is being trained by {_owner(held)} (heartbeat {lock_age:.0f} s ago, train log {log_age:.0f} s ago)")
+        tmp = path.with_name(f"{RUN_LOCK}.{rec['token']}.tmp")
+        tmp.write_text(json.dumps(rec))
+        try:
+            st2 = path.stat()
+        except FileNotFoundError:
+            st2 = None
+        if st2 is None or (st2.st_ino, st2.st_mtime_ns) != (st.st_ino, st.st_mtime_ns):  # beaten, or taken over meanwhile
+            tmp.unlink(missing_ok=True)
+            raise RunBusy(f"{out}: {RUN_LOCK} changed while taking it over (now {_owner(_read_lock(path))})")
+        os.replace(tmp, path)
+        time.sleep(LOCK_CONFIRM_S)  # a concurrent takeover by another process: the last replace wins
+        if _read_lock(path).get("token") != rec["token"]:
+            raise RunBusy(f"{out}: lock taken over concurrently by {_owner(_read_lock(path))}")
+        return RunLock(path, rec)
+    _write_json_atomic(rec, path)
+    return RunLock(path, rec)
+
+
 # ----------------------------------------------------------------------------- training
 
 
@@ -570,20 +714,31 @@ def train(
         for name in STOP_SIGNALS:
             sig = getattr(signal, name)
             prev[sig] = signal.signal(sig, lambda s, f: stop.__setitem__("sig", signal.Signals(s).name))
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    lock = None
     try:
+        if not (out / "DONE").exists():  # a DONE run is a no-op (checked in _train) without the lock
+            lock = acquire_run_lock(out, float(cfg["training"].get("run_lock_stale_s", 600)))
         return _train(cfg, data_path, out_dir, seed_slot, run_id, run_spec, run_spec_path, frozen, image_root, max_steps, max_examples,
-                      allow_missing_images, device, stop_after_micro, log, stop)
+                      allow_missing_images, device, stop_after_micro, log, stop, lock)
     finally:
+        if lock:
+            lock.release()
         for sig, h in prev.items():
             signal.signal(sig, h)
 
 
 def _train(cfg, data_path, out_dir, seed_slot, run_id, run_spec, run_spec_path, frozen, image_root, max_steps, max_examples,
-           allow_missing_images, device, stop_after_micro, log, stop) -> dict:
+           allow_missing_images, device, stop_after_micro, log, stop, lock=None) -> dict:
     def check_stop(where: str) -> None:
         if stop["sig"]:
             log(f"{run_id}: {stop['sig']} {where}; stopping without a new checkpoint")
             raise Preempted(stop["sig"])
+
+    def check_lock(where: str) -> None:
+        if lock is not None and lock.lost.is_set():
+            raise RunBusy(f"{out_dir}: run lock taken over by {_owner(lock.thief)}; stopped {where} without writing")
 
     import torch
     from transformers import AutoConfig, AutoProcessor
@@ -702,6 +857,7 @@ def _train(cfg, data_path, out_dir, seed_slot, run_id, run_spec, run_spec_path, 
         f"(warmup {warmup}), loss {norm}, seed {seed}, device {device}, config {config_hash[:12]}")
 
     def checkpoint(reason: str) -> Path | None:
+        check_lock(f"before a checkpoint ({reason})")
         if saved["at"] == state["pos"]:  # e.g. a signal that arrived during a periodic save
             log(f"{run_id}: checkpoint at data position {state['pos']} already saved ({reason})")
             return None
@@ -751,6 +907,7 @@ def _train(cfg, data_path, out_dir, seed_slot, run_id, run_spec, run_spec_path, 
             state["opt_step"] += 1
             state["step_losses"].append(state["acc_loss"])
             state["micro"], state["acc_loss"] = 0, 0.0
+            check_lock(f"at optimizer step {state['opt_step']}")
             dt = time.time() - step_t0
             rec = {"step": state["opt_step"], "loss": state["step_losses"][-1], "lr": [g["lr"] for g in opt.param_groups], "step_time_s": dt,
                    "examples": n_step_ex, "examples_per_s": n_step_ex / dt, "tokens": n_step_tok, "tokens_per_s": n_step_tok / dt, "segment": state["segments"],
@@ -774,6 +931,7 @@ def _train(cfg, data_path, out_dir, seed_slot, run_id, run_spec, run_spec_path, 
         return {"status": "max_steps", "opt_step": state["opt_step"], "config_hash": config_hash, "log": str(log_path)}
     checkpoint("final")  # a death during the export resumes here, with nothing left to train
     check_stop("before the adapter export")
+    check_lock("before the adapter export")
 
     adapter = out / "adapter"
     tmp = out / ".tmp-adapter"
@@ -807,6 +965,7 @@ def _train(cfg, data_path, out_dir, seed_slot, run_id, run_spec, run_spec_path, 
         "wall_time_s": state["wall_s"], "segments": state["segments"], "adapter": str(adapter), "adapter_sha256": file_sha256(adapter / "adapter_model.safetensors"),
         "versions": _versions(), "repo": str(REPO_ROOT),
     }
+    check_lock("before the manifest and DONE")
     _write_json_atomic(man, out / "manifest.json")
     with open(done, "w") as f:
         f.write(config_hash + "\n")
@@ -814,6 +973,7 @@ def _train(cfg, data_path, out_dir, seed_slot, run_id, run_spec, run_spec_path, 
         os.fsync(f.fileno())
     _fsync_dir(out)
     if not tcfg.get("keep_checkpoints_after_done", False):  # DONE + manifest are durable; a crash mid-delete leaves a DONE no-op
+        check_lock("before deleting the checkpoints")
         shutil.rmtree(ckpt_root, ignore_errors=True)
     log(f"{run_id}: DONE: {state['opt_step']} steps, {state['examples']} examples, {state['tokens']} tokens, {state['wall_s'] / 3600:.2f} h -> {adapter}")
     return {"status": "done", **man}

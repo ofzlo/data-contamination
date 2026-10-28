@@ -580,3 +580,76 @@ def test_checkpoints_kept_after_done_if_asked_and_crash_mid_delete_is_a_noop(tin
     assert (tmp_path / "run" / "DONE").exists() and (tmp_path / "run" / "checkpoints").exists()
     res = _run(tiny_cfg(tiny_model_dir), data, root, tmp_path / "run")
     assert res["status"] == "done-noop" and res["config_hash"] == keep["config_hash"]  # keep_checkpoints_after_done is not in the hash
+
+
+# ----------------------------------------------------------------------------- run lock (more in test_run_lock.py)
+
+
+def _foreign_lock(out: Path) -> Path:
+    import contam.train as tr
+
+    out.mkdir(parents=True, exist_ok=True)
+    p = out / tr.RUN_LOCK
+    p.write_text(json.dumps({"host": "nodeX", "pid": 4242, "slurm_job_id": "other", "slurm_restart_count": "0", "started_at": "then", "token": "theirs"}))
+    return p
+
+
+def test_run_lock_busy_released_after_done_and_preemption_and_skipped_when_done(tiny_model_dir, tmp_path, monkeypatch):
+    import contam.train as tr
+
+    monkeypatch.delenv("SLURM_JOB_ID", raising=False)
+    data, root = make_data(tmp_path)
+    cfg, out = tiny_cfg(tiny_model_dir), tmp_path / "run"
+    held = _foreign_lock(out)
+    with pytest.raises(tr.RunBusy, match="pid 4242"):
+        _run(cfg, data, root, out)
+    assert sorted(os.listdir(out)) == [tr.RUN_LOCK]  # nothing touched
+    held.unlink()
+    with pytest.raises(tr.Preempted):
+        _run(cfg, data, root, out, stop_after_micro=3)
+    assert not (out / tr.RUN_LOCK).exists() and (out / tr.RUN_RELEASED).exists()
+    assert tr.complete_checkpoints(out / "checkpoints")
+    assert _run(cfg, data, root, out)["status"] == "done"
+    assert not (out / tr.RUN_LOCK).exists()
+    held = _foreign_lock(out)  # a DONE run is a no-op and does not look at the lock
+    assert _run(cfg, data, root, out)["status"] == "done-noop"
+    assert json.loads(held.read_text())["token"] == "theirs"
+
+
+def test_cli_exits_busy_without_touching_the_run(tiny_model_dir, tmp_path):
+    from contam.train import EXIT_BUSY
+
+    data, root = make_data(tmp_path)
+    cfg_path = _cli_config(tmp_path, tiny_model_dir)
+    out = tmp_path / "cli"
+    _foreign_lock(out)
+    cmd = [sys.executable, str(REPO_ROOT / "scripts/train_lora.py"), "--config", str(cfg_path), "--data", str(data), "--seed-slot", "0", "--run-id", "tiny",
+           "--out-dir", str(out), "--image-root", str(root), "--skip-manifest-check"]
+    env = {k: v for k, v in os.environ.items() if not k.startswith("SLURM_")}
+    env.update(HF_HUB_OFFLINE="1", CUDA_VISIBLE_DEVICES="")
+    r = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=600)
+    assert r.returncode == EXIT_BUSY == 76, r.stdout + r.stderr
+    assert "busy, not started" in r.stderr and "host nodeX pid 4242 SLURM job other" in r.stderr
+    assert sorted(os.listdir(out)) == ["RUN.lock"]
+
+
+def test_lock_taken_over_mid_run_stops_without_writing(tiny_model_dir, tmp_path, monkeypatch):
+    import contam.train as tr
+
+    monkeypatch.delenv("SLURM_JOB_ID", raising=False)
+    monkeypatch.setattr(tr, "LOCK_HEARTBEAT_S", 0.05)
+    data, root = make_data(tmp_path)
+    out = tmp_path / "run"
+    real = tr.forward_logits
+
+    def stolen(*a, **k):  # another trainer takes the lock during the first micro-batch
+        if json.loads((out / tr.RUN_LOCK).read_text())["token"] != "theirs":
+            _foreign_lock(out)
+            time.sleep(0.5)
+        return real(*a, **k)
+
+    monkeypatch.setattr(tr, "forward_logits", stolen)
+    with pytest.raises(tr.RunBusy, match="taken over by host nodeX pid 4242"):
+        _run(tiny_cfg(tiny_model_dir), data, root, out)
+    assert not (out / "train_log.jsonl").exists() and not (out / "checkpoints").exists() and not (out / tr.RUN_RELEASED).exists()
+    assert json.loads((out / tr.RUN_LOCK).read_text())["token"] == "theirs"

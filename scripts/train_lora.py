@@ -8,7 +8,8 @@ spec the manifest lock must hold and contain general_order.jsonl and the spec's 
 (--skip-manifest-check: timing / smoke only; the manifest then records null).
 
 Auto-resumes from <out-dir>/checkpoints; a DONE run is a no-op. On SIGTERM / SIGUSR1 / SIGHUP it
-saves a checkpoint and exits 75 (requeue and rerun the same command). For SLURM, e.g.
+saves a checkpoint and exits 75 (requeue and rerun the same command). If another process is training the
+same out dir (run lock, contam.train) it exits 76 without touching it. For SLURM, e.g.
 ``sbatch --signal=B:USR1@180 ...`` with ``exec python scripts/train_lora.py ...``.
 
 Examples:
@@ -27,7 +28,7 @@ from pathlib import Path
 
 from contam.config import load_config, read_json
 from contam.data.freeze import DEFAULT_LOCK
-from contam.train import EXIT_PREEMPTED, Preempted, check_run_spec_frozen, train
+from contam.train import EXIT_BUSY, EXIT_PREEMPTED, Preempted, RunBusy, check_run_spec_frozen, train
 
 
 # variable-length micro-batches: avoid allocator fragmentation (no effect on the numerics)
@@ -75,17 +76,22 @@ def main(argv=None) -> None:
         ap.error("a plain --data run has no run spec to check against the manifest lock; pass --skip-manifest-check (timing / smoke only)")
     out = Path(args.out_dir or Path(cfg["paths"]["ckpt_dir"]) / run_id)
     out.mkdir(parents=True, exist_ok=True)
-    log_file = open(out / "train.log", "a")
+    log_file = None  # opened at the first message: a busy exit must not touch train.log (its mtime is part of the run lock)
 
     def log(msg: str) -> None:
+        nonlocal log_file
         line = f"[{datetime.now():%F %T}] {msg}"
         print(line, flush=True)
+        log_file = log_file or open(out / "train.log", "a")
         log_file.write(line + "\n")
         log_file.flush()
 
     try:
         res = train(cfg, data, out, slot, run_id, run_spec=spec, run_spec_path=args.run_spec, frozen=frozen, image_root=args.image_root,
                     max_steps=args.max_steps, max_examples=args.max_examples, allow_missing_images=args.allow_missing_images, log=log)
+    except RunBusy as e:
+        print(f"[{datetime.now():%F %T}] {run_id}: busy, not started: {e}; exiting {EXIT_BUSY}", file=sys.stderr, flush=True)
+        sys.exit(EXIT_BUSY)
     except Preempted as e:
         log(f"{run_id}: stopped by {e}; checkpoint saved, exiting {EXIT_PREEMPTED} (rerun to resume)")
         sys.exit(EXIT_PREEMPTED)
