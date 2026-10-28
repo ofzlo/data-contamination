@@ -4,6 +4,10 @@
 δ_S(metric) = 2 × SD (ddof=1) across d=0 seeds of the UNSEEN-group mean of the S metric.
 δ_A(metric) = 2 × SD (ddof=1) across d=0 seeds of the seen-minus-unseen gap of group means.
 δ_V is set at G1 from the Paired d=64 effect (scripts/gate_report.py); its floors are recorded here.
+Group means (and the base CIDEr / SPICE bands) are taken from the per-image scores without the B1
+analysis exclusion; ``--include-b1-overlap`` gives the robustness margins (not gate-valid).
+The G0 pass rule needs the base check (prereg G0): without ``--base`` the margins are written but
+are NOT gate-valid (``base_check: "missing"``). A base outside the band is only a warning.
 
 Example:
     python scripts/compute_margins.py --d0 outputs/metrics/d0_s{0,1,2,3,4}.json \
@@ -21,9 +25,19 @@ import numpy as np
 
 from contam.config import load_config, read_json, write_json
 from contam.data.freeze import add_check_args, cli_check
-from contam.eval.evaluate import warn_partial
+from contam.eval.evaluate import analysis_ids, check_exclusion, exclusion_record, load_analysis_exclusion, mark_validity, warn_partial
 from contam.eval.gates import N_BASELINE_SEEDS
 from contam.eval.stats import association_margin, style_margin
+
+
+def group_mean(m: dict, split: dict, group: str, field: str, exclusion: dict) -> float | None:
+    """Mean of a per-image field over ``group`` without the B1 exclusion (None if not scored; exits if the group is empty)."""
+    ids = analysis_ids(split, group, map(int, m["per_image"]), exclusion)
+    if not ids:
+        sys.exit(f"{m.get('checkpoint_id')!r}: no {group} images left to average {field} over (after the B1 exclusion)")
+    if field not in m["per_image"][str(ids[0])]:
+        return None
+    return float(np.mean([m["per_image"][str(i)][field] for i in ids]))
 
 
 def main() -> None:
@@ -33,6 +47,7 @@ def main() -> None:
     ap.add_argument("--base", default=None, help="metrics JSON of the untrained base model")
     ap.add_argument("--split", default=None, help="split JSON the d=0 metrics were computed on (default: <splits_dir>/split_<name>.json)")
     ap.add_argument("--allow-partial", action="store_true", help="smoke tests only; output is NOT gate-valid")
+    ap.add_argument("--include-b1-overlap", action="store_true", help="robustness view: keep the B1 analysis exclusion images; output is NOT gate-valid")
     add_check_args(ap)
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
@@ -46,8 +61,25 @@ def main() -> None:
     split_path = args.split or Path(cfg["paths"]["splits_dir"]) / f"split_{d0[0]['split']['name']}.json"
     frozen = cli_check(args, cfg, split_path, "compute_margins")
     cur = frozen["manifest_split_sha256"]
-    if read_json(split_path)["content_hash"] != d0[0]["split"]["content_hash"]:
+    split = read_json(split_path)
+    if split["content_hash"] != d0[0]["split"]["content_hash"]:
         sys.exit(f"d=0 metrics were not computed on {split_path}")
+    excl = load_analysis_exclusion(cfg, args.include_b1_overlap)
+    try:
+        check_exclusion([(p, m) for p, m in zip(args.d0, d0)], excl)
+    except ValueError as e:
+        sys.exit(str(e))
+    base = read_json(args.base) if args.base else None
+    if base is not None:  # the untrained base must be evaluated like the d=0 runs (adapter None by design)
+        try:
+            check_exclusion([(args.base, base)], excl)
+        except ValueError as e:
+            sys.exit(f"{e}; re-evaluate the base (scripts/evaluate_checkpoint.py) under the current B1 exclusion")
+        for f in ("prompt_sha", "model"):
+            want = {m.get("provenance", {}).get("generations", {}).get(f) for m in d0}
+            got = base.get("provenance", {}).get("generations", {}).get(f)
+            if len(want) != 1 or got not in want:
+                sys.exit(f"base {args.base} was generated with {f} {got!r}, the d=0 runs with {sorted(map(str, want))}; regenerate and re-evaluate the base under the current p_cap")
     d0_shas = {m.get("manifest_split_sha256") for m in d0}
     if len({os.path.realpath(p) for p in args.d0}) != len(args.d0) or len({m["generations_hash"] for m in d0}) != len(d0):
         sys.exit("duplicate d=0 inputs (same file or identical generations)")
@@ -61,40 +93,54 @@ def main() -> None:
         sys.exit(f"d=0 metrics must share one recorded manifest_split_sha256; got {sorted(map(str, d0_shas))}")
     elif cur is not None and d0_shas != {cur}:
         sys.exit(f"d=0 metrics were checked against split sha256 {d0_shas.pop()}, but the current lock entry for {Path(split_path).name} is {cur}")
+    if base is not None and not args.allow_partial:  # evaluated like the d=0 runs: complete, same split and lock entry
+        if not base.get("complete"):
+            sys.exit(f"base {args.base} was computed on a partial image set")
+        if base.get("split", {}).get("content_hash") != split["content_hash"]:
+            sys.exit(f"base {args.base} was not evaluated on {split_path}")
+        if base.get("manifest_split_sha256") not in d0_shas:
+            sys.exit(f"base {args.base} was checked against split sha256 {base.get('manifest_split_sha256')}, the d=0 runs against {sorted(d0_shas)}; re-evaluate the base")
 
-    out = {"gate_valid": not args.allow_partial and cur is not None, "split": d0[0]["split"], "d0_files": [os.path.realpath(p) for p in args.d0],
-           "manifest_split_sha256": cur if d0_shas == {cur} else None, "manifest_lock_sha256": frozen["manifest_lock_sha256"], "sd_multiplier": k, "delta_S": {}, "delta_A": {}, "per_seed": {}}
+    out = {"split": d0[0]["split"], "d0_files": [os.path.realpath(p) for p in args.d0],
+           "manifest_split_sha256": cur if d0_shas == {cur} else None, "manifest_lock_sha256": frozen["manifest_lock_sha256"],
+           "analysis_exclusion": exclusion_record(excl, split, map(int, d0[0]["per_image"])), "sd_multiplier": k, "delta_S": {}, "delta_A": {}, "per_seed": {}}
+    out["base_check"] = "missing" if base is None else "present"
+    out["base_file"] = os.path.realpath(args.base) if base is not None else None
+    mark_validity(out, not args.allow_partial and cur is not None and base is not None, excl)
     for f in cfg["style"]["primary_metrics"]:
-        vals = [m["summary"]["unseen"][f] for m in d0]
+        vals = [group_mean(m, split, "unseen", f, excl) for m in d0]
         out["delta_S"][f] = style_margin(vals, k)
         out["per_seed"][f"unseen_mean/{f}"] = vals
-    a_fields = sorted({mcfg["a_metric"], "cider_heldout", "spice_heldout"} & set(d0[0]["summary"]["seen"]))
+    a_fields = sorted({mcfg["a_metric"], "cider_heldout", "spice_heldout"} & set(next(iter(d0[0]["per_image"].values()))))
     for f in a_fields:
-        seen = [m["summary"]["seen"][f] for m in d0]
-        unseen = [m["summary"]["unseen"][f] for m in d0]
+        seen = [group_mean(m, split, "seen", f, excl) for m in d0]
+        unseen = [group_mean(m, split, "unseen", f, excl) for m in d0]
         out["delta_A"][f] = association_margin(seen, unseen, k)
         out["per_seed"][f"seen_minus_unseen/{f}"] = list(np.subtract(seen, unseen))
     out["delta_A_primary_metric"] = mcfg["a_metric"]
     out["delta_A_coprimary_metric"] = mcfg.get("a_metric_coprimary")
     out["delta_V_rule"] = {"rel": mcfg["delta_v_rel"], "floor": mcfg["delta_v_floor"], "set_at": "G1 (Paired d=64)"}
 
-    print(f"G0 margins on split {out['split']['name']} ({len(d0)} d=0 seeds, multiplier {k}):")
+    n_ex = out["analysis_exclusion"]["n_excluded"]
+    print(f"G0 margins on split {out['split']['name']} ({len(d0)} d=0 seeds, multiplier {k}); B1 overlap ({n_ex['seen']} seen, {n_ex['unseen']} unseen) "
+          f"{'INCLUDED (robustness, NOT gate-valid)' if args.include_b1_overlap else 'excluded'}:")
     for f, v in out["delta_S"].items():
         print(f"  delta_S[{f}] = {v:.4f}   unseen means per seed: {np.round(out['per_seed'][f'unseen_mean/{f}'], 4).tolist()}")
     for f, v in out["delta_A"].items():
         print(f"  delta_A[{f}] = {v:.4f}   seen-unseen per seed: {np.round(out['per_seed'][f'seen_minus_unseen/{f}'], 4).tolist()}")
-    d0c = [m["summary"]["all"].get("cider_all10") for m in d0]
-    print(f"  d=0 CIDEr(all10, all images) per seed: {d0c}")
+    d0c = [group_mean(m, split, "all", "cider_all10", excl) for m in d0]
+    print(f"  d=0 CIDEr(all10, all analysed images) per seed: {d0c}")
 
-    if args.base:
-        base = read_json(args.base)
-        c = base["summary"]["all"].get("cider_all10")
+    if base is None:
+        print("  WARNING: no untrained-base metrics (--base): the G0 base CIDEr check is missing; margins are NOT gate-valid", file=sys.stderr)
+    else:
+        c = group_mean(base, split, "all", "cider_all10", excl)
         lo, hi = mcfg["base_cider_band"]
         ok = c is not None and lo <= c <= hi
-        out["base_cider_check"] = {"cider_all10": c, "band": [lo, hi], "in_band": ok, "prompt_id": base.get("prompt_id")}
+        out["base_cider_check"] = {"cider_all10": c, "band": [lo, hi], "in_band": ok, "prompt_id": base.get("prompt_id"), "n_images": len(analysis_ids(split, "all", map(int, base["per_image"]), excl))}
         msg = f"  base CIDEr(all10) = {c:.2f}; reported-range band [{lo}, {hi}]"
         print(msg + (" OK" if ok else "  <-- WARNING: outside band; check prompt, decoding and tokenization before G1"))
-        sp = base["summary"]["all"].get("spice_all10")
+        sp = group_mean(base, split, "all", "spice_all10", excl)
         if "base_spice_band" in mcfg and sp is not None:
             slo, shi = mcfg["base_spice_band"]
             out["base_spice_check"] = {"spice_all10": sp, "band": [slo, shi], "in_band": slo <= sp <= shi}

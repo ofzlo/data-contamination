@@ -12,7 +12,7 @@ from contam.config import REPO_ROOT, file_sha256, load_config, read_json, write_
 from contam.data import freeze
 from contam.data.splits import make_split
 from contam.eval.gates import validate_inputs
-from tests.conftest import locked_split, make_annotations
+from tests.conftest import base_metrics, excl_record, locked_split, make_annotations
 
 
 @pytest.fixture
@@ -98,11 +98,11 @@ def _gate_inputs(tmp_path, g1_setup, split_sha):
     split, baseline, margins, _, ckpt = g1_setup
     paths = [str(tmp_path / f"d0_s{s}.json") for s in range(5)]
     for p, m in zip(paths, baseline):
-        write_json(dict(m, manifest_split_sha256=split_sha), p)
-    write_json(dict(margins, d0_files=paths, manifest_split_sha256=split_sha), tmp_path / "margins.json")
+        write_json(dict(m, manifest_split_sha256=split_sha, analysis_exclusion=excl_record()), p)
+    write_json(dict(margins, d0_files=paths, manifest_split_sha256=split_sha, analysis_exclusion=excl_record()), tmp_path / "margins.json")
     cks = []
     for s in range(2):
-        write_json(dict(ckpt(f"p{s}", 2.0), manifest_split_sha256=split_sha), tmp_path / f"p{s}.json")
+        write_json(dict(ckpt(f"p{s}", 2.0), manifest_split_sha256=split_sha, analysis_exclusion=excl_record()), tmp_path / f"p{s}.json")
         cks.append({"condition": "Paired", "d": 4, "seed": s, "metrics": str(tmp_path / f"p{s}.json")})
     return {"margins": str(tmp_path / "margins.json"), "baseline": paths, "checkpoints": cks}
 
@@ -151,10 +151,12 @@ def test_compute_margins_cli_split_sha(tmp_path, g1_setup):
     def write_d0(sha):
         for k, (p, m) in enumerate(zip(paths, baseline)):
             summ = {g: {"word_count": 10.0 + k + i, "boilerplate": 0.0} for i, g in enumerate(("seen", "unseen", "all"))}
-            write_json(dict(m, summary=summ, manifest_split_sha256=sha), p)
+            write_json(dict(m, summary=summ, manifest_split_sha256=sha, analysis_exclusion=excl_record()), p)
 
     write_d0(split_sha)
-    cmd = [sys.executable, str(REPO_ROOT / "scripts/compute_margins.py"), "--config", str(cfg_path), "--lock", str(lock), "--out", str(tmp_path / "m.json"), "--d0"] + paths
+    write_json(base_metrics(baseline[0], manifest_split_sha256=split_sha, analysis_exclusion=excl_record()), tmp_path / "base.json")
+    cmd = [sys.executable, str(REPO_ROOT / "scripts/compute_margins.py"), "--config", str(cfg_path), "--lock", str(lock), "--out", str(tmp_path / "m.json"),
+           "--base", str(tmp_path / "base.json"), "--d0"] + paths
     r = subprocess.run(cmd, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     m = read_json(tmp_path / "m.json")
@@ -176,6 +178,9 @@ def test_b3_report_gate_valid(locked, tmp_path):
     ann, split, _, cfg_path, lock, split_path, split_sha = locked
     raw = yaml.safe_load(cfg_path.read_text())
     raw["paths"]["annotations"] = str(tmp_path / "ann.json")
+    out_ids = sorted(split["seen"])[:2] + sorted(split["unseen"])[:1]
+    (tmp_path / "excl.txt").write_text("\n".join(map(str, out_ids)) + "\n")
+    raw["analysis"]["exclude_image_ids_file"] = str(tmp_path / "excl.txt")
     cfg_path.write_text(yaml.safe_dump(raw))
     b3_ids = yaml.safe_load((REPO_ROOT / "configs" / "prompts.yaml").read_text())["b3"]["prompt_ids"]
     (tmp_path / "b3").mkdir()
@@ -189,6 +194,12 @@ def test_b3_report_gate_valid(locked, tmp_path):
     assert r.returncode == 0, r.stderr
     rep = read_json(tmp_path / "b3" / "b3_report.json")
     assert rep["gate_valid"] is True and rep["manifest_split_sha256"] == split_sha
+    assert rep["analysis_exclusion"]["image_ids"] == sorted(out_ids) and rep["analysis_exclusion"]["applied"] is True
+    assert rep["n_analysed"] == rep["n_images"] - len(out_ids)
+    r = subprocess.run(cmd + ["--include-b1-overlap"], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    rep = read_json(tmp_path / "b3" / "b3_report.json")
+    assert rep["gate_valid"] is False and rep["robustness"] is True and rep["robustness_valid"] is True and rep["n_analysed"] == rep["n_images"]
     r = subprocess.run(cmd + ["--skip-manifest-check"], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     rep = read_json(tmp_path / "b3" / "b3_report.json")

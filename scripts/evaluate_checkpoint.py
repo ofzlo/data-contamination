@@ -3,6 +3,8 @@
 
 Optionally adds teacher-forced V metrics (``--logprobs`` from scripts/score_refs.py) and paired
 comparisons against the d=0 baseline (``--baseline``, one metrics JSON per d=0 seed; pooled).
+Every image is scored; group summaries and comparisons leave out the B1 analysis exclusion
+(``analysis.exclude_image_ids_file``) unless ``--include-b1-overlap`` (robustness view, not gate-valid).
 
 Example:
     python scripts/evaluate_checkpoint.py --checkpoint-id paired_d64_s0 \
@@ -23,8 +25,10 @@ from contam.eval.evaluate import (
     evaluate_checkpoint,
     generations_provenance,
     load_generations,
+    load_analysis_exclusion,
     load_logprobs,
     logprobs_provenance,
+    mark_validity,
     warn_partial,
 )
 
@@ -44,6 +48,7 @@ def main() -> None:
     ap.add_argument("--no-spice-cache", action="store_true")
     ap.add_argument("--allow-partial", action="store_true", help="allow generations for a subset of split images (smoke tests only)")
     ap.add_argument("--pos", action="store_true", help="add spaCy POS mix to S")
+    ap.add_argument("--include-b1-overlap", action="store_true", help="robustness view: keep the B1 analysis exclusion images in every result; output is NOT gate-valid")
     add_check_args(ap)
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
@@ -52,6 +57,7 @@ def main() -> None:
     frozen = cli_check(args, cfg, args.split, "evaluate_checkpoint")
     ann = load_annotations(args.annotations or cfg["paths"]["annotations"])
     split = read_json(args.split)
+    excl = load_analysis_exclusion(cfg, args.include_b1_overlap)
     if args.allow_partial:
         warn_partial("evaluate_checkpoint")
     gens = load_generations(args.generations, args.prompt_id, checkpoint_id=args.checkpoint_id)
@@ -76,20 +82,22 @@ def main() -> None:
         require_all=not args.allow_partial,
         checkpoint_id=args.checkpoint_id,
         with_pos=args.pos,
+        exclusion=excl,
     )
     res["prompt_id"] = args.prompt_id
     res["provenance"] = prov
     res.update(frozen)
-    res["gate_valid"] = res["complete"] and frozen["manifest_split_sha256"] is not None
+    mark_validity(res, res["complete"] and frozen["manifest_split_sha256"] is not None, excl)
     if args.baseline:
         st = cfg["stats"]
         base = [read_json(p) for p in args.baseline]
-        res["vs_d0"] = compare([res], base, split, n_boot=st["n_boot"], seed=st["boot_seed"], ci=st["ci"], allow_partial=args.allow_partial)
+        res["vs_d0"] = compare([res], base, split, n_boot=st["n_boot"], seed=st["boot_seed"], ci=st["ci"], allow_partial=args.allow_partial, exclusion=excl)
         res["vs_d0"]["baseline_files"] = list(args.baseline)
     write_json(res, args.out)
     s = res["summary"]
     keys = [k for k in ("cider_heldout", "spice_heldout", "cider_all10", "word_count", "boilerplate", "exact_match_train", "rmi_sum") if k in s["all"]]
-    print(f"{args.checkpoint_id}: n={res['n_images']} complete={res['complete']} -> {args.out}")
+    n_ex = res["analysis_exclusion"]["n_excluded"]["all"]
+    print(f"{args.checkpoint_id}: n={res['n_images']} complete={res['complete']} B1 overlap ({n_ex} images) {'INCLUDED (robustness)' if args.include_b1_overlap else 'excluded from group means'} -> {args.out}")
     for g in ("seen", "unseen", "all"):
         print(f"  {g:7s} n={s[g]['n']:5d} " + " ".join(f"{k}={s[g][k]:.3f}" for k in keys))
 

@@ -30,6 +30,10 @@ G2 (``g2_report``; τ procedure in contam.eval.stats):
 * Secondary: the CI of log₂ τ*_memory − log₂ τ*_style is above 0 (censoring fractions reported).
 * The overall verdict is the primary one; the plan's fallback is reported when both effects start
   at the same d (τ̂_style = τ̂_memory).
+
+Both gates leave out the B1 analysis exclusion (``exclusion``; contam.eval.evaluate) and require
+every input to record the same one; with it not applied they give the robustness view, which is
+not gate-valid.
 """
 
 from __future__ import annotations
@@ -41,10 +45,9 @@ from typing import Sequence
 
 import numpy as np
 
-from contam.data.splits import group_ids
 from contam.eval import stats
 from contam.eval.association import aligned
-from contam.eval.evaluate import check_comparable, compare, per_image_field, warn_partial
+from contam.eval.evaluate import analysis_ids, check_comparable, check_exclusion, compare, exclusion_record, is_valid, mark_validity, per_image_field, warn_partial
 from contam.eval.stats import memory_margin
 
 N_BASELINE_SEEDS = 5
@@ -76,27 +79,35 @@ def validate_inputs(
     seeds_per_cell: int,
     allow_partial: bool = False,
     split_sha: str | None = None,
+    exclusion: dict | None = None,
 ) -> None:
     """Refuse gate inputs that would silently corrupt a verdict.
 
-    * margins must have been computed on the same split, be gate-valid, and come from exactly the
-      given baseline files;
+    * margins must have been computed on the same split, be gate-valid, carry the G0 base CIDEr check
+      (``base_cider_check``; its band is a warning, so only its presence is required), and come from
+      exactly the given baseline files;
     * the baseline must be N_BASELINE_SEEDS distinct d=0 runs (distinct files, checkpoint ids and
       generations), and every cell must have ``seeds_per_cell`` seeds;
     * no metrics file or checkpoint id may appear twice across baseline and checkpoints, no
       (condition, d, seed) may appear twice, and no two seeds of a cell may have identical generations;
     * every run's generations must carry the same, recorded GATE_PROVENANCE_FIELDS;
     * margins, baseline and checkpoint metrics must carry one recorded manifest_split_sha256 (the split's
-      manifest lock entry when they were evaluated), equal to ``split_sha`` (the current entry) if given.
+      manifest lock entry when they were evaluated), equal to ``split_sha`` (the current entry) if given;
+    * margins, baseline and checkpoint metrics must record the B1 exclusion ``exclusion``, and the
+      margins must have applied it as this run does (``check_exclusion``; never relaxed).
     The gate-validity, manifest-lock, file-identity and seed-count rules are relaxed only with ``allow_partial``
     (the report is then not gate-valid). Split / completeness / image-set agreement of every
     metrics file is checked by ``compare``.
     """
     if margins["split"]["content_hash"] != split["content_hash"]:
         raise ValueError(f"margins were computed on split {margins['split']['name']}, not {split['name']}")
+    check_exclusion([("margins", margins)], exclusion, aggregates=True)
+    check_exclusion([(f"metrics {m.get('checkpoint_id')!r}", m) for m in [*baseline, *cell_metrics]], exclusion)
     if not allow_partial:
-        if margins.get("gate_valid") is not True:
+        if not is_valid(margins, exclusion):
             raise ValueError("margins are not gate-valid (computed with --allow-partial?)")
+        if "base_cider_check" not in margins:
+            raise ValueError("margins carry no G0 base CIDEr check (compute_margins.py without --base); G0 is incomplete, hold G1")
         if sorted(map(os.path.realpath, margins.get("d0_files", []))) != sorted(map(os.path.realpath, baseline_paths)):
             raise ValueError(f"margins were computed from d=0 files {margins.get('d0_files')}, not the gate baseline {list(baseline_paths)}")
         shas = {x.get("manifest_split_sha256") for x in [margins, *baseline, *cell_metrics]}
@@ -123,16 +134,19 @@ def validate_inputs(
             raise ValueError(f"baseline and checkpoint generations must share one recorded {f}; got {sorted(map(str, vals))}")
 
 
-def g1_report(split: dict, margins: dict, baseline: Sequence[dict], checkpoints: Sequence[dict], cell_metrics: Sequence[dict], cfg: dict, allow_partial: bool = False) -> dict:
+def g1_report(
+    split: dict, margins: dict, baseline: Sequence[dict], checkpoints: Sequence[dict], cell_metrics: Sequence[dict], cfg: dict, allow_partial: bool = False, exclusion: dict | None = None
+) -> dict:
     """Compute the G1 report dict (inputs validated by the caller with ``validate_inputs``)."""
     st, gcfg, mcfg = cfg["stats"], cfg["gates"], cfg["margins"]
     if allow_partial:
         warn_partial("gate_report")
-    kw = dict(n_boot=st["n_boot"], seed=st["boot_seed"], ci=st["ci"], allow_partial=allow_partial)
+    kw = dict(n_boot=st["n_boot"], seed=st["boot_seed"], ci=st["ci"], allow_partial=allow_partial, exclusion=exclusion)
     cells = defaultdict(list)
     for c, m in zip(checkpoints, cell_metrics):
         cells[(c["condition"], int(c["d"]))].append(m)
-    report = {"split": split["name"], "split_hash": split["content_hash"], "gate_valid": not allow_partial, "cells": {}, "criteria": {}}
+    report = {"split": split["name"], "split_hash": split["content_hash"], "analysis_exclusion": exclusion_record(exclusion, split, map(int, baseline[0]["per_image"])), "cells": {}, "criteria": {}}
+    mark_validity(report, not allow_partial, exclusion)
     for key in sorted(cells):
         ms = cells[key]
         report["cells"][f"{key[0]}/d{key[1]}"] = {"pooled": compare(ms, baseline, split, **kw), "per_seed": [compare([m], baseline, split, **kw) for m in ms], "n_seeds": len(ms)}
@@ -182,10 +196,13 @@ def g1_report(split: dict, margins: dict, baseline: Sequence[dict], checkpoints:
     b["rule"] = f"{pkey} at d={dose}: pooled CI_lo > delta_S and every seed's estimate > delta_S (others secondary)"
     report["criteria"]["b"] = b
     report["criteria"]["c"] = {"verdict": "MANUAL", "note": "P0 grid fits compute: confirm from the W1 timing run (Minho)"}
-    if allow_partial:
-        for k in ("a", "b"):
-            report["criteria"][k]["verdict"] = "NOT GATE-VALID (--allow-partial): " + report["criteria"][k]["verdict"]
+    for k in ("a", "b"):
+        report["criteria"][k]["verdict"] = _verdict_prefix(allow_partial, report["robustness"]) + report["criteria"][k]["verdict"]
     return report
+
+
+def _verdict_prefix(allow_partial: bool, robustness: bool) -> str:
+    return ("NOT GATE-VALID (--allow-partial): " if allow_partial else "") + ("ROBUSTNESS (B1 overlap included), not a gate decision: " if robustness else "")
 
 
 # ----------------------------------------------------------------------------- G2
@@ -220,6 +237,7 @@ def validate_g2_inputs(
     cfg: dict,
     allow_partial: bool = False,
     split_sha: str | None = None,
+    exclusion: dict | None = None,
 ) -> None:
     """G1's ``validate_inputs`` (with ``gates.g2_seeds_per_cell``) plus the G2 grid and the G1 report.
 
@@ -228,7 +246,8 @@ def validate_g2_inputs(
       every cell are 0 .. g2_seeds_per_cell − 1;
     * a metrics file whose checkpoint_id names a cell (``parse_run_id``) is used for that cell only;
     * the G1 report (source of δ_V) was made on this split, is gate-valid, under the inputs' split
-      sha, from the same baseline and margins files, and its criterion (a) passed;
+      sha and B1 exclusion (applied the same way), from the same baseline and margins files, and its
+      criterion (a) passed;
     * every metrics file has the τ fields (the memory field needs teacher-forced log-probs).
     The grid, seed-slot and G1-validity rules are relaxed with ``allow_partial`` (not gate-valid).
     """
@@ -238,7 +257,8 @@ def validate_g2_inputs(
         named = parse_run_id(m.get("checkpoint_id"))
         if named is not None and named != (c["condition"], int(c["d"]), int(c["seed"])):
             raise ValueError(f"{c['metrics']}: checkpoint_id {m['checkpoint_id']!r} is {named}, but it is given as {(c['condition'], int(c['d']), int(c['seed']))}")
-    validate_inputs(split, margins, baseline_paths, baseline, checkpoints, cell_metrics, n, allow_partial, split_sha)
+    validate_inputs(split, margins, baseline_paths, baseline, checkpoints, cell_metrics, n, allow_partial, split_sha, exclusion)
+    check_exclusion([("the G1 report", g1)], exclusion, aggregates=True)
     allowed = set(gcfg["g2_doses"]) | set(gcfg["g2_optional_doses"])
     grid, slots = defaultdict(set), defaultdict(set)
     for c in checkpoints:
@@ -271,11 +291,11 @@ def validate_g2_inputs(
     if g1.get("split_hash") != split["content_hash"]:
         raise ValueError(f"the G1 report was made on split {g1.get('split')}, not {split['name']}")
     if not allow_partial:
-        if g1.get("gate_valid") is not True:
+        if not is_valid(g1, exclusion):
             raise ValueError("the G1 report is not gate-valid; delta_V cannot be taken from it")
         if g1.get("manifest_split_sha256") != margins.get("manifest_split_sha256"):
             raise ValueError(f"the G1 report was made under split sha256 {g1.get('manifest_split_sha256')}, the G2 inputs under {margins.get('manifest_split_sha256')}")
-        if not str(g1["criteria"]["a"].get("verdict", "")).startswith("PASS"):
+        if not str(g1["criteria"]["a"].get("verdict", "")).removeprefix(_verdict_prefix(False, g1.get("robustness") is True)).startswith("PASS"):
             raise ValueError(f"G1(a) did not pass ({g1['criteria']['a'].get('verdict')}); delta_V is not set")
         if sorted(map(os.path.realpath, g1.get("baseline_files", []))) != sorted(map(os.path.realpath, baseline_paths)):
             raise ValueError(f"the G1 report used d=0 files {g1.get('baseline_files')}, not the G2 baseline {list(baseline_paths)}")
@@ -290,18 +310,21 @@ def validate_g2_inputs(
                 raise ValueError(f"metrics {m.get('checkpoint_id')!r} have no per-image {f} (teacher-forced log-probs missing?)")
 
 
-def g2_report(split: dict, margins: dict, g1: dict, baseline: Sequence[dict], checkpoints: Sequence[dict], cell_metrics: Sequence[dict], cfg: dict, allow_partial: bool = False) -> dict:
+def g2_report(
+    split: dict, margins: dict, g1: dict, baseline: Sequence[dict], checkpoints: Sequence[dict], cell_metrics: Sequence[dict], cfg: dict, allow_partial: bool = False,
+    exclusion: dict | None = None,
+) -> dict:
     """Compute the G2 report dict (inputs validated by the caller with ``validate_g2_inputs``)."""
     st, gcfg = cfg["stats"], cfg["gates"]
     if allow_partial:
         warn_partial("g2_report")
-    check_comparable(list(baseline) + list(cell_metrics), split, allow_partial)
+    check_comparable(list(baseline) + list(cell_metrics), split, allow_partial, exclusion)
     kw = dict(n_boot=st["n_boot"], seed=st["boot_seed"], ci=st["ci"])
     sf, mf = gcfg["tau_style_metric"], gcfg["tau_memory_metric"]
     direction = cfg["style"]["primary_metrics"][sf]
     delta_s, delta_v = float(margins["delta_S"][sf]), float(g1["criteria"]["a"]["delta_V"][mf])
     avail = [int(k) for k in baseline[0]["per_image"]]
-    seen, unseen = ([i for i in group_ids(split, g) if i in set(avail)] for g in ("seen", "unseen"))
+    seen, unseen = (analysis_ids(split, g, avail, exclusion) for g in ("seen", "unseen"))
     cells = defaultdict(list)
     for c, m in zip(checkpoints, cell_metrics):
         cells[(c["condition"], int(c["d"]))].append(m)
@@ -311,7 +334,7 @@ def g2_report(split: dict, margins: dict, g1: dict, baseline: Sequence[dict], ch
 
     base_s, base_m = arr(baseline, sf, unseen), arr(baseline, mf, seen)
     report = {
-        "split": split["name"], "split_hash": split["content_hash"], "gate_valid": not allow_partial,
+        "split": split["name"], "split_hash": split["content_hash"], "analysis_exclusion": exclusion_record(exclusion, split, avail),
         "style_metric": sf, "memory_metric": mf, "delta_S": delta_s, "delta_V": delta_v,
         "tau_condition": gcfg["g2_tau_condition"], "conditions": {}, "samedist": {}, "criteria": {},
     }
@@ -374,10 +397,11 @@ def g2_report(split: dict, margins: dict, g1: dict, baseline: Sequence[dict], ch
     report["same_start"] = same_start
     report["fallback"] = G2_FALLBACK if same_start else None
     report["verdict"] = prim["verdict"]
-    if allow_partial:
-        for k in ("primary", "secondary"):
-            report["criteria"][k]["verdict"] = "NOT GATE-VALID (--allow-partial): " + report["criteria"][k]["verdict"]
-        report["verdict"] = "NOT GATE-VALID (--allow-partial): " + report["verdict"]
+    mark_validity(report, not allow_partial, exclusion)
+    prefix = _verdict_prefix(allow_partial, report["robustness"])
+    for k in ("primary", "secondary"):
+        report["criteria"][k]["verdict"] = prefix + report["criteria"][k]["verdict"]
+    report["verdict"] = prefix + report["verdict"]
     return report
 
 
@@ -391,7 +415,7 @@ def _f(x) -> str:
 
 def g2_text(report: dict) -> str:
     """Readable G2 report."""
-    L = [f"G2 report (split {report['split']}){'' if report['gate_valid'] else '  [NOT GATE-VALID]'}",
+    L = [f"G2 report (split {report['split']}){'' if report['gate_valid'] else '  [NOT GATE-VALID]'}{'  [ROBUSTNESS: B1 overlap included]' if report.get('robustness') else ''}",
          f"delta_S[{report['style_metric']}] = {report['delta_S']:.4f}   delta_V[{report['memory_metric']}] = {report['delta_V']:.4f}"]
     for cond, c in report["conditions"].items():
         role = "verdict" if cond == report["tau_condition"] else "reported only"

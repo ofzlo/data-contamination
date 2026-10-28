@@ -32,6 +32,7 @@ def delta(model_seen: np.ndarray, base_seen: np.ndarray, model_unseen: np.ndarra
     return delta_from_means(ms.mean(), bs.mean(), mu.mean(), bu.mean())
 
 
+# Γ / Δ inputs: callers must take the image ids from evaluate.analysis_ids (B1 exclusion applied).
 def gamma(delta_pair: float, delta_image: float, delta_caption: float) -> float:
     """Eq. 4: paired item-specific gain beyond the sum of the unimodal gains."""
     return delta_pair - (delta_image + delta_caption)

@@ -4,7 +4,9 @@
 δ_S comes from the G0 margins (--margins), δ_V from the G1 gate report (--g1-report). Checkpoints are
 metrics JSONs whose checkpoint_id names the cell, ``{condition}_d{d}_s{seed slot}`` with an optional
 ``G<n>_`` prefix (e.g. ``paired_d16_s2``, ``G2_Caption_d8_s0``), or are given explicitly with
-``--cell COND:D=path[,path...]`` (seed slots 0, 1, ... in the order given).
+``--cell COND:D=path[,path...]`` (seed slots 0, 1, ... in the order given). The B1 analysis exclusion
+is left out; ``--include-b1-overlap`` gives the robustness view (from robustness margins and G1
+report; not gate-valid).
 
 Example:
     python scripts/g2_report.py --split data/splits/split_A.json --margins outputs/g0/margins_A.json \
@@ -20,6 +22,7 @@ from pathlib import Path
 
 from contam.config import load_config, read_json, write_json
 from contam.data.freeze import add_check_args, cli_check
+from contam.eval.evaluate import load_analysis_exclusion, mark_validity
 from contam.eval.gates import CONDITION_NAMES, g2_report, g2_text, parse_run_id, validate_g2_inputs
 
 
@@ -42,6 +45,7 @@ def main() -> None:
     ap.add_argument("--cell", action="append", default=[], help="COND:D=path[,path...] for metrics whose checkpoint_id does not name the cell")
     ap.add_argument("--allow-partial", action="store_true", help="smoke tests only: allow partial metrics / incomplete grid; output is NOT gate-valid")
     add_check_args(ap)
+    ap.add_argument("--include-b1-overlap", action="store_true", help="robustness view: keep the B1 analysis exclusion images in every result; output is NOT gate-valid")
     ap.add_argument("--out", required=True, help="report JSON; the text report goes next to it (.txt)")
     args = ap.parse_args()
 
@@ -63,10 +67,11 @@ def main() -> None:
         for c in parse_cell(spec):
             cks.append(c)
             cms.append(read_json(c["metrics"]))
-    validate_g2_inputs(split, margins, args.margins, g1, args.baseline, base, cks, cms, cfg, args.allow_partial, frozen["manifest_split_sha256"])
-    report = g2_report(split, margins, g1, base, cks, cms, cfg, args.allow_partial)
+    excl = load_analysis_exclusion(cfg, args.include_b1_overlap)
+    validate_g2_inputs(split, margins, args.margins, g1, args.baseline, base, cks, cms, cfg, args.allow_partial, frozen["manifest_split_sha256"], excl)
+    report = g2_report(split, margins, g1, base, cks, cms, cfg, args.allow_partial, excl)
     report.update(frozen)
-    report["gate_valid"] = report["gate_valid"] and frozen["manifest_split_sha256"] is not None
+    mark_validity(report, not args.allow_partial and frozen["manifest_split_sha256"] is not None, excl)
     report["inputs"] = {"margins": args.margins, "g1_report": args.g1_report, "baseline": list(args.baseline), "checkpoints": cks}
     write_json(report, args.out)
     text = g2_text(report)

@@ -13,7 +13,7 @@ from contam.config import REPO_ROOT, load_config, read_json, write_json
 from contam.data.splits import make_split
 from contam.eval import stats
 from contam.eval.gates import g2_report, g2_text, parse_run_id, validate_g2_inputs
-from tests.conftest import locked_split, make_annotations
+from tests.conftest import excl_record, locked_split, make_annotations
 
 DELTA_S, DELTA_V = 1.0, 0.5
 PROV = {"generations": {"prompt_sha": "P", "model": "m", "batch_size": 16, "max_new_tokens": 300}}
@@ -45,7 +45,8 @@ def make_g2(style=STYLE_AT_4, memory=MEMORY_AT_64, doses=(1, 4, 16, 64), n_seeds
 
     baseline = [run(f"G0_d0_s{s}", 0.0, 0.0) for s in range(5)]
     base_paths = [f"/tmp/g2/G0_d0_s{s}.json" for s in range(5)]
-    margins = {"gate_valid": True, "split": baseline[0]["split"], "d0_files": base_paths, "manifest_split_sha256": sha, "delta_S": {"word_count": DELTA_S, "boilerplate": 0.01}}
+    margins = {"gate_valid": True, "split": baseline[0]["split"], "d0_files": base_paths, "manifest_split_sha256": sha, "delta_S": {"word_count": DELTA_S, "boilerplate": 0.01},
+               "base_cider_check": {"cider_all10": 0.5, "band": [0.0, 1.0], "in_band": True}}
     g1 = {"split": split["name"], "split_hash": split["content_hash"], "gate_valid": True, "manifest_split_sha256": sha, "baseline_files": base_paths, "margins_file": MARGINS,
           "criteria": {"a": {"verdict": "PASS", "delta_V": {"rmi_sum": DELTA_V, "rmi_norm": 0.02}}}}
     cks, cms = [], []
@@ -204,9 +205,9 @@ def test_g2_report_cli_end_to_end(tmp_path):
     bp = []
     for m in base:
         bp.append(str(tmp_path / f"{m['checkpoint_id']}.json"))
-        write_json(dict(m, manifest_split_sha256=split_sha), bp[-1])
-    write_json(dict(margins, d0_files=bp, manifest_split_sha256=split_sha), tmp_path / "margins.json")
-    write_json(dict(g1, manifest_split_sha256=split_sha, baseline_files=bp, margins_file=str(tmp_path / "margins.json")), tmp_path / "g1.json")
+        write_json(dict(m, manifest_split_sha256=split_sha, analysis_exclusion=excl_record()), bp[-1])
+    write_json(dict(margins, d0_files=bp, manifest_split_sha256=split_sha, analysis_exclusion=excl_record()), tmp_path / "margins.json")
+    write_json(dict(g1, manifest_split_sha256=split_sha, baseline_files=bp, margins_file=str(tmp_path / "margins.json"), analysis_exclusion=excl_record()), tmp_path / "g1.json")
     named, samedist = [], []
     for c, m in zip(cks, cms):
         p = str(tmp_path / f"{m['checkpoint_id']}.json")
@@ -215,7 +216,7 @@ def test_g2_report_cli_end_to_end(tmp_path):
             samedist.append(p)
         else:
             named.append(p)
-        write_json(dict(m, manifest_split_sha256=split_sha), p)
+        write_json(dict(m, manifest_split_sha256=split_sha, analysis_exclusion=excl_record()), p)
     cmd = [sys.executable, str(REPO_ROOT / "scripts/g2_report.py"), "--config", str(cfg_path), "--lock", str(lock), "--split", str(split_path),
            "--margins", str(tmp_path / "margins.json"), "--g1-report", str(tmp_path / "g1.json"), "--baseline", *bp, "--checkpoints", *named,
            "--cell", "SameDist:16=" + ",".join(samedist), "--out", str(tmp_path / "g2.json")]
@@ -265,11 +266,11 @@ def test_g1_report_paths_are_realpaths_for_g2(tmp_path):
         for row in m["per_image"].values():
             row["rmi_norm"] = row["rmi_sum"] / 10
             row["exact_match_train"] = 1.0 if m["checkpoint_id"].startswith("paired_d64") else 0.0
-        write_json(dict(m, manifest_split_sha256=split_sha, **over), mdir / name)
+        write_json(dict(m, manifest_split_sha256=split_sha, analysis_exclusion=excl_record(), **over), mdir / name)
         return str(mdir / name)
 
     bp = [put(m, f"{m['checkpoint_id']}.json") for m in base]
-    write_json(dict(margins, d0_files=bp, manifest_split_sha256=split_sha), mdir / "margins.json")
+    write_json(dict(margins, d0_files=bp, manifest_split_sha256=split_sha, analysis_exclusion=excl_record()), mdir / "margins.json")
     paths = {m["checkpoint_id"]: put(m, f"{m['checkpoint_id']}.json") for m in cms}
     g1_cells = [c for c in cks if c["condition"] == "Paired" and c["d"] in (4, 64) and c["seed"] < 2]
     man = {"split": "../splits/" + split_path.name, "margins": "../m/margins.json", "baseline": [f"../m/{Path(p).name}" for p in bp],

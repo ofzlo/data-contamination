@@ -67,7 +67,8 @@ proposal (`docs/CSE576_Project.pdf`): eq. 1 generation, eq. 2 group score, eq. 3
   9 seen in split A, 8 in split B, none in the shared 3.125% set). They stay in the frozen splits and
   are scored, but S / A / V group means and gate decisions leave them out
   (`analysis.exclude_image_ids_file`); a robustness check reports every result with them.
-  TODO(Yoorhim): apply the exclusion in the eval and gate code.
+  Done (Yoorhim): applied in `contam.eval.evaluate.analysis_ids`, recorded as `analysis_exclusion` in
+  every metrics / margins / gate JSON and required to match across gate inputs; robustness view: `--include-b1-overlap`.
 - **Freezing.** `manifests/MANIFEST.lock.json` (tracked) holds the sha256 of every split, SameDist
   and general-order file and the seed config above. Every training and eval run checks it
   (`scripts/freeze_manifests.py --check`); a file can be added to the lock but never changed. Every
@@ -148,6 +149,10 @@ and robustness.
 - **Sanity check.** The untrained base model's CIDEr (all10, all images) is compared with a warning
   band. With the locked long-form p_cap the bands are CIDEr all10 [0, 1] and SPICE all10 [15, 17]
   (B3 "verbose", the same text: CIDEr 0.001, SPICE 16.01). This is a warning band, not a hard pass/fail.
+  The band check (`scripts/compute_margins.py`) is over the 4,480 images left after the B1 analysis
+  exclusion (Section 2), as is `scripts/b3_prompt_intervention.py` (`--include-b1-overlap` for all
+  4,500). The earlier B3 numbers were over all 4,500; the difference is tiny (old base: CIDEr 0.002577
+  over 4,480 vs 0.002566 over 4,500, SPICE 16.093 vs 16.105).
   - W1 check (2026-10-21, split A, all 4,500 images, T=0). The ≈105 holds only for a one-sentence
     prompt. "Describe the image in one short sentence." gives CIDEr 105.6, matching lmms-eval.
     The current p_cap placeholder, "Describe the image.", gives CIDEr 0.003: base captions average

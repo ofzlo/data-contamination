@@ -5,7 +5,10 @@ Per checkpoint, a GPU stage (``contam.generate``: prompt ``caption``, T=0, every
 ``scripts/score_refs.py``) and a CPU stage (``scripts/evaluate_checkpoint.py --logprobs``; SPICE-bound).
 Two-stage pipeline: checkpoint k's CPU stage runs while checkpoint k+1's GPU stage runs; never two
 GPU stages or two CPU stages at once. When all five metrics exist, ``scripts/compute_margins.py``
-(with the untrained base for the CIDEr sanity check) writes the margins and the G0 report.
+(with the untrained base for the CIDEr sanity check) writes the margins and the G0 report. Without
+a current base (missing, or not generated / evaluated as the d=0 runs are) the margins are still
+written but are NOT gate-valid, G0 is reported incomplete, and they are recomputed on every run
+until a current base exists.
 
 The manifest lock is checked first (contam.data.freeze.check_split_frozen). Resumable: a stage
 whose outputs are complete is skipped, an incomplete one is re-run (the CLIs resume themselves).
@@ -47,6 +50,7 @@ from typing import Callable, NamedTuple, Sequence
 from contam.config import REPO_ROOT, load_config, load_prompts, prompt_sha, read_json, read_jsonl
 from contam.data.freeze import DEFAULT_LOCK, check_split_frozen
 from contam.data.nocaps import load_annotations
+from contam.eval.evaluate import load_analysis_exclusion
 
 PROMPT_ID = "caption"
 N_G0_SEEDS = 5
@@ -58,6 +62,7 @@ class Stage(NamedTuple):
     done: Callable[[], bool]  # outputs complete: skip before, required after a run
     log: Path
     log_mode: str = "a"
+    check: Callable[[], bool] | None = None  # required after a run instead of ``done`` (if set)
 
 
 class StageError(RuntimeError):
@@ -124,7 +129,7 @@ class Chain:
         if rc != 0:
             tail = "".join(open(s.log).readlines()[-20:])
             raise StageError(f"{s.name}: exit code {rc} after {mins:.1f} min; see {s.log}\n{tail}")
-        if not s.done():
+        if not (s.check or s.done)():
             raise StageError(f"{s.name}: exited 0 after {mins:.1f} min but its outputs are incomplete; see {s.log}")
         self.log(f"{s.name}: done in {mins:.1f} min")
 
@@ -242,12 +247,32 @@ def logprobs_complete(path: Path, prov: dict, n_refs: dict[int, int], ids: Seque
     return all(have.get(i) == set(range(n_refs[i])) for i in ids)
 
 
-def json_current(path: Path, inputs: Sequence[Path], split_sha: str | None) -> bool:
-    """Gate-valid JSON output checked against the current lock entry of the split, newer than every input."""
+def json_current(path: Path, inputs: Sequence[Path], split_sha: str | None, excl_sha: str, valid: bool = True) -> bool:
+    """Gate-valid (``valid``; False: not gate-valid) JSON output checked against the current lock entry
+    of the split and made under the current B1 analysis exclusion (file sha256), newer than every
+    input. Outputs from before the exclusion (none recorded) are stale and recomputed."""
     if split_sha is None or not path.exists() or not all(p.exists() for p in inputs):
         return False
     m = read_json(path)
-    return m.get("gate_valid") is True and m.get("manifest_split_sha256") == split_sha and all(path.stat().st_mtime >= p.stat().st_mtime for p in inputs)
+    return (m.get("gate_valid") is valid and m.get("manifest_split_sha256") == split_sha and (m.get("analysis_exclusion") or {}).get("sha256") == excl_sha
+            and all(path.stat().st_mtime >= p.stat().st_mtime for p in inputs))
+
+
+def base_problem(path: Path, model_prov: dict, split: dict, split_sha: str | None, excl_sha: str) -> str | None:
+    """Why the untrained-base metrics cannot serve the G0 base check; None if they are current: generated
+    with the current caption prompt and model, and evaluated completely on this split, its current lock
+    entry and the current B1 analysis exclusion."""
+    if not path.exists():
+        return f"no untrained-base metrics {path}"
+    m = read_json(path)
+    gen = m.get("provenance", {}).get("generations", {})
+    if not all(gen.get(k) == v for k, v in model_prov.items()):
+        return f"untrained-base metrics {path} were not generated with the current p_cap / model (regenerate and re-evaluate the base)"
+    if (not m.get("complete") or m.get("split", {}).get("content_hash") != split["content_hash"] or split_sha is None
+            or m.get("manifest_split_sha256") != split_sha or (m.get("analysis_exclusion") or {}).get("sha256") != excl_sha):
+        return (f"untrained-base metrics {path} were not evaluated completely on split {split['name']} under its current lock entry and "
+                "the current B1 analysis exclusion (re-evaluate the base with scripts/evaluate_checkpoint.py; its generations are current)")
+    return None
 
 
 def plan(chain: Chain, args, cfg: dict, split: dict, split_sha: str | None) -> tuple[list, list]:
@@ -257,6 +282,7 @@ def plan(chain: Chain, args, cfg: dict, split: dict, split_sha: str | None) -> t
     n_refs = {int(a["image_id"]): len(a["refs"]) for a in load_annotations(cfg["paths"]["annotations"])}
     # the CLIs below use the default prompts file and the configured model
     model_prov = {"model": cfg["models"]["main"], "prompt_sha": prompt_sha(load_prompts()[PROMPT_ID])}
+    excl_sha = load_analysis_exclusion(cfg)["sha256"]
     py = [sys.executable]
     common = (["--config", args.config] if args.config else []) + ["--lock", str(args.lock)]
     sp = ["--split", str(args.split)]
@@ -274,7 +300,7 @@ def plan(chain: Chain, args, cfg: dict, split: dict, split_sha: str | None) -> t
         cpu = [
             Stage(f"{run_id}/evaluate", py + [str(REPO_ROOT / "scripts/evaluate_checkpoint.py"), *common, *ck, "--generations", str(gens), "--logprobs", str(lp), *sp,
                                               "--prompt-id", PROMPT_ID, "--out", str(met)],
-                  lambda met=met, gens=gens, lp=lp: json_current(met, [gens, lp], split_sha), logs / f"{run_id}_evaluate.log"),
+                  lambda met=met, gens=gens, lp=lp: json_current(met, [gens, lp], split_sha, excl_sha), logs / f"{run_id}_evaluate.log"),
         ]
         jobs.append((gpu, cpu))
         metrics.append(met)
@@ -283,17 +309,29 @@ def plan(chain: Chain, args, cfg: dict, split: dict, split_sha: str | None) -> t
         margins = g0 / f"margins_{split['name']}.json"
         base = Path(args.base)
         cmd = py + [str(REPO_ROOT / "scripts/compute_margins.py"), *common, *sp, "--d0", *map(str, metrics), "--out", str(margins)]
-        if base.exists():
+        problem = base_problem(base, model_prov, split, split_sha, excl_sha)
+        if problem is None:
             cmd[-2:-2] = ["--base", str(base)]
+
+            def margins_done() -> bool:  # gate-valid, with the check of this base
+                if not json_current(margins, [*metrics, base], split_sha, excl_sha):
+                    return False
+                m = read_json(margins)
+                return "base_cider_check" in m and m.get("base_file") == os.path.realpath(base)
+
+            final.append(Stage("G0/compute_margins", cmd, margins_done, g0 / f"g0_report_{split['name']}.txt", "w"))
         else:
-            chain.log(f"WARNING: no untrained-base metrics {base}; margins without the base CIDEr check (recomputed once it exists)")
+            chain.log(f"WARNING: {problem}; treated as missing. G0 incomplete: margins are written without the base CIDEr check and are NOT gate-valid "
+                      "(recomputed on every run until a current base exists)")
 
-        def margins_done() -> bool:  # a base produced later makes the margins stale
-            if not base.exists():
-                return json_current(margins, metrics, split_sha)
-            return json_current(margins, [*metrics, base], split_sha) and "base_cider_check" in read_json(margins)
+            def margins_without_base() -> bool:  # written, and carrying no (old) base check
+                if not json_current(margins, metrics, split_sha, excl_sha, valid=False):
+                    return False
+                m = read_json(margins)
+                return m.get("base_check") == "missing" and "base_cider_check" not in m
 
-        final.append(Stage("G0/compute_margins", cmd, margins_done, g0 / f"g0_report_{split['name']}.txt", "w"))
+            # never final without a base: done() is False, so the stage always runs
+            final.append(Stage("G0/compute_margins", cmd, lambda: False, g0 / f"g0_report_{split['name']}.txt", "w", margins_without_base))
     return jobs, final
 
 
@@ -387,6 +425,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     if args.dry_run:
         chain.log("DRY RUN: nothing was run")
         return
+    if final and not final[0].done():
+        chain.log(f"G0 incomplete: base missing/stale (see the WARNING above); margins in {final[0].log.parent} are NOT gate-valid")
     result = f"margins and report in {final[0].log.parent}" if final else "margins not computed"
     chain.log(f"DONE: {len(jobs)} d=0 checkpoint(s) evaluated on split {split['name']}; {result}; {(time.time() - t0) / 3600:.2f} h")
 

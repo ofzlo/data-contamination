@@ -15,6 +15,8 @@ means (stats.style_margin). Reported false-PASS rates:
 * single:   the same single test with the pooled CI rule only;
 * any-of-4: the earlier rule, CI_lo > δ_S for any of {Caption, Paired} × {word count, boilerplate}.
 
+The simulation runs with no B1 analysis exclusion (exclusion=None: every simulated image analysed).
+
 Example:
     python scripts/sim_g1b_null.py --n-images 900 --n-boot 300 --reps 300 --sigma-seed 0 0.5 1 2
 """
@@ -64,7 +66,7 @@ def simulate(n_images: int, n_boot: int, reps: int, sigma_seed: float, seed: int
         base_paths = [f"/null/r{r}/d0_s{s}.json" for s in range(N_BASELINE_SEEDS)]
         base = [run(f"r{r}_d0_s{s}") for s in range(N_BASELINE_SEEDS)]
         dS = {f: style_margin([np.mean([m["per_image"][str(i)][f] for i in split["unseen"]]) for m in base], cfg["margins"]["sd_multiplier"]) for f in cfg["style"]["primary_metrics"]}
-        margins = {"gate_valid": True, "split": base[0]["split"], "d0_files": base_paths, "manifest_split_sha256": "sim", "delta_S": dS}
+        margins = {"gate_valid": True, "split": base[0]["split"], "d0_files": base_paths, "manifest_split_sha256": "sim", "base_cider_check": {"in_band": True}, "delta_S": dS}
         cks = [{"condition": c, "d": dose, "seed": s, "metrics": f"/null/r{r}/{c}_s{s}.json"} for c in ("Caption", "Paired") for s in range(k_seeds)]
         ms = [run(f"r{r}_{c['condition']}_s{c['seed']}") for c in cks]
         validate_inputs(split, margins, base_paths, base, cks, ms, k_seeds)

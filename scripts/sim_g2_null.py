@@ -19,6 +19,8 @@ mult < 1 the PASS rate is power. One report gives the verdict of every rule:
 * two_level_bootstrap:   CI upper bound with seeds and then images resampled (the default rule);
 * seed_t:                t upper bound over the per-seed estimates (df = 2).
 
+The simulation runs with no B1 analysis exclusion (exclusion=None: every simulated image analysed).
+
 Example (4 processes):
     python scripts/sim_g2_null.py --reps 150 --n-boot 300 --n-images 900 \
         --sigma-seed 0 0.1 0.2 0.4 --mult 1.0 1.2 0 0.5 --seed 0 --jobs 4
@@ -85,7 +87,7 @@ def simulate(n_images: int, n_boot: int, reps: int, sigma_seed: float, mult: flo
             cks.append({"condition": "SameDist", "d": 16, "seed": s, "metrics": f"/null/r{r}/SameDist_16_{s}.json"})
             cms.append(run(f"r{r}_SameDist_16_{s}", 3.0, 0.0))
         margins_path = f"/null/r{r}/margins.json"
-        margins = {"gate_valid": True, "split": base[0]["split"], "d0_files": base_paths, "manifest_split_sha256": "sim", "delta_S": {"word_count": DELTA_S}}
+        margins = {"gate_valid": True, "split": base[0]["split"], "d0_files": base_paths, "manifest_split_sha256": "sim", "base_cider_check": {"in_band": True}, "delta_S": {"word_count": DELTA_S}}
         g1 = {"split": split["name"], "split_hash": split["content_hash"], "gate_valid": True, "manifest_split_sha256": "sim", "baseline_files": base_paths,
               "margins_file": margins_path, "criteria": {"a": {"verdict": "PASS", "delta_V": {"rmi_sum": DELTA_V}}}}
         validate_g2_inputs(split, margins, margins_path, g1, base_paths, base, cks, cms, cfg)

@@ -157,6 +157,8 @@ python scripts/evaluate_checkpoint.py --checkpoint-id d0_s0 --generations output
 #    (add --baseline outputs/metrics/d0_s*.json for paired S / Δ / ΔRMI vs. d=0)
 #    Every eval CLI refuses a split that is not byte-identical to its manifests/MANIFEST.lock.json entry
 #    and records that entry's sha256 (--skip-manifest-check: smoke tests only, output not gate-valid).
+#    Group means, Δ, margins and gates leave out the 20 B1 overlap images (all are still scored); every
+#    output records `analysis_exclusion`; --include-b1-overlap gives the robustness view (not gate-valid).
 #    G0 chain for the five d=0 checkpoints (steps 3 and 4, pipelined, resumable; --dry-run to preview):
 python scripts/run_g0_eval.py --split data/splits/split_A.json --run G0_d0_s0=CKPT0 ... --run G0_d0_s4=CKPT4
 # 4. G0 margins, G1 report, B3 prompt intervention

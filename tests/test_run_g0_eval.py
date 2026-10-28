@@ -13,7 +13,8 @@ import yaml
 
 from contam.config import REPO_ROOT, file_sha256, load_config, load_prompts, prompt_sha, write_json
 from contam.data.splits import make_split
-from tests.conftest import locked_split, make_annotations
+from contam.eval.evaluate import load_analysis_exclusion
+from tests.conftest import excl_record, locked_split, make_annotations
 
 _spec = importlib.util.spec_from_file_location("run_g0_eval", REPO_ROOT / "scripts" / "run_g0_eval.py")
 g0 = importlib.util.module_from_spec(_spec)
@@ -119,6 +120,14 @@ def test_dry_run_runs_nothing(tmp_path, capsys):
     assert capsys.readouterr().out.count("would run") == 10
 
 
+def _base(cfg, split, split_sha, **over):
+    """Untrained-base metrics generated with the current caption prompt and model, evaluated completely on
+    ``split`` under its lock entry ``split_sha`` and the current B1 exclusion."""
+    return {"summary": {}, "complete": True, "split": {"name": split["name"], "content_hash": split["content_hash"]}, "manifest_split_sha256": split_sha,
+            "analysis_exclusion": load_analysis_exclusion(cfg),
+            "provenance": {"generations": {"model": cfg["models"]["main"], "prompt_sha": prompt_sha(load_prompts()["caption"]), "adapter": None, **over}}}
+
+
 def _g0_env(tmp_path, base=True):
     ann = make_annotations(2, 4, 2, seed=5)
     split = make_split(ann, 1, 2, name="A")
@@ -132,7 +141,7 @@ def _g0_env(tmp_path, base=True):
                    tmp_path / "outputs" / "runs" / "G0" / f"G0_d0_s{k}.json")
         (tmp_path / f"ad{k}").mkdir()
     if base:
-        write_json({"summary": {}}, tmp_path / "outputs" / "g0" / "base_metrics_v.json")
+        write_json(_base(load_config(cfg_path), split, split_sha), tmp_path / "outputs" / "g0" / "base_metrics_v.json")
     argv = ["--config", str(cfg_path), "--lock", str(lock), "--split", str(split_path)] + [f"--run=G0_d0_s{k}={tmp_path / f'ad{k}'}" for k in range(5)]
     return ann, split, load_config(cfg_path), lock, split_sha, argv
 
@@ -152,7 +161,7 @@ def test_main_dry_run_plans_g0_layout(tmp_path, capsys):
     assert f"manifest lock ok: {lock} (file sha256 {file_sha256(lock)}); split_A.json entry sha256 {split_sha}" in out
     assert "G0_d0_s0/generate: complete, skipped" in out and out.count("would run") == 15  # 15 stages - 1 complete + margins
     assert "outputs/g0/G0_d0_s4_metrics_v_A.json" in out and "outputs/logprobs/G0_d0_s4.jsonl" in out and "margins_A.json" in out
-    assert "--base" in out and "WARNING: no untrained-base" not in out
+    assert "--base" in out and "WARNING: no untrained-base" not in out and "G0 incomplete" not in out
     assert not (tmp_path / "outputs" / "logs").exists() and not (tmp_path / "outputs" / "g0" / ".run_g0_eval.lock").exists()
 
     with pytest.raises(SystemExit, match="no run spec"):
@@ -163,7 +172,7 @@ def test_main_warns_without_base_and_base_makes_margins_stale(tmp_path, capsys):
     ann, split, cfg, lock, split_sha, argv = _g0_env(tmp_path, base=False)
     g0.main(argv + ["--dry-run"])
     out = capsys.readouterr().out
-    assert "WARNING: no untrained-base metrics" in out and "--base" not in out
+    assert "WARNING: no untrained-base metrics" in out and "G0 incomplete" in out and "--base" not in out
     args = g0.argparse.Namespace(runs=g0.parse_runs([a.removeprefix("--run=") for a in argv[6:]]), config=None, lock=lock, split=argv[5], base=tmp_path / "outputs" / "g0" / "base_metrics_v.json")
     chain = g0.Chain(tmp_path / "c.log", dry_run=True)
     _, final = g0.plan(chain, args, cfg, split, split_sha)
@@ -172,14 +181,38 @@ def test_main_warns_without_base_and_base_makes_margins_stale(tmp_path, capsys):
         write_json({}, m)
     margins = tmp_path / "outputs" / "g0" / "margins_A.json"
     time.sleep(0.01)
-    write_json({"gate_valid": True, "manifest_split_sha256": split_sha}, margins)
+    no_base = {"gate_valid": False, "manifest_split_sha256": split_sha, "analysis_exclusion": excl_record(), "base_check": "missing"}
+    write_json(no_base, margins)  # margins without a base are never final: re-run every time, but accepted as written
+    assert not final[0].done() and final[0].check()
+    write_json(dict(no_base, gate_valid=True), margins)  # an old margins file valid without the base check
+    assert not final[0].check()
+    write_json(dict(no_base, base_cider_check={}), margins)  # must not carry an old base's check
+    assert not final[0].check()
+    time.sleep(0.01)
+    write_json(_base(cfg, split, split_sha, prompt_sha="old p_cap"), args.base)  # a base under an old prompt counts as missing
+    _, final = g0.plan(chain, args, cfg, split, split_sha)
+    assert not final[0].done() and "--base" not in final[0].cmd
+    out = capsys.readouterr().out
+    assert "not generated with the current p_cap" in out and "regenerate and re-evaluate the base" in out and "G0 incomplete" in out
+    for stale in (dict(analysis_exclusion=None), dict(complete=False), dict(manifest_split_sha256="old"), dict(split={"name": "A", "content_hash": "other"})):
+        write_json(dict(_base(cfg, split, split_sha), **stale), args.base)  # generations current, evaluation stale: re-evaluate only
+        _, final = g0.plan(chain, args, cfg, split, split_sha)
+        assert not final[0].done() and "--base" not in final[0].cmd, stale
+        out = capsys.readouterr().out
+        assert "re-evaluate the base with scripts/evaluate_checkpoint.py" in out and "regenerate" not in out, stale
+    time.sleep(0.01)
+    write_json(_base(cfg, split, split_sha), args.base)  # the base appears later: margins must be recomputed
+    _, final = g0.plan(chain, args, cfg, split, split_sha)
+    assert not final[0].done() and "--base" in final[0].cmd and final[0].check is None
+    assert "G0 incomplete" not in capsys.readouterr().out
+    with_base = {"gate_valid": True, "manifest_split_sha256": split_sha, "analysis_exclusion": excl_record(), "base_check": "present", "base_cider_check": {}, "base_file": str(args.base.resolve())}
+    write_json(dict(with_base, base_file="/other/base.json"), margins)  # checked against another base
+    assert not final[0].done()
+    write_json(with_base, margins)
     assert final[0].done()
     time.sleep(0.01)
-    write_json({"summary": {}}, args.base)  # the base appears later: margins must be recomputed
-    _, final = g0.plan(chain, args, cfg, split, split_sha)
+    write_json(_base(cfg, split, split_sha), args.base)  # base re-evaluated after the margins
     assert not final[0].done()
-    write_json({"gate_valid": True, "manifest_split_sha256": split_sha, "base_cider_check": {}}, margins)
-    assert final[0].done()
 
 
 def test_gens_and_logprobs_complete(tmp_path):
@@ -211,22 +244,36 @@ def test_gens_and_logprobs_complete(tmp_path):
         assert not g0.logprobs_complete(lp, prov, {i: 2 for i in ids}, ids), other
 
 
+def test_stage_check_replaces_done_after_a_run(tmp_path):
+    chain = g0.Chain(tmp_path / "c.log")
+    s = _stage(tmp_path, "margins", 0.05)
+    chain.run(s._replace(done=lambda: False, check=s.done))  # never skipped, but its run counts as done
+    assert s.done() and "margins: done" in (tmp_path / "c.log").read_text()
+    with pytest.raises(g0.StageError, match="outputs are incomplete"):
+        chain.run(s._replace(done=lambda: False, check=lambda: False))
+
+
 def test_json_current(tmp_path):
     inp, out = tmp_path / "in.jsonl", tmp_path / "m.json"
     inp.write_text("x")
-    assert not g0.json_current(out, [inp], "S")
+    ok = {"gate_valid": True, "manifest_split_sha256": "S", "analysis_exclusion": {"sha256": "E"}}
+    assert not g0.json_current(out, [inp], "S", "E")
     time.sleep(0.01)
-    write_json({"gate_valid": True, "manifest_split_sha256": "S"}, out)
-    assert g0.json_current(out, [inp], "S")
-    assert not g0.json_current(out, [inp], None)  # manifest check failed
-    assert not g0.json_current(out, [inp], "T")  # other split entry
-    assert not g0.json_current(out, [inp, tmp_path / "missing"], "S")
-    write_json({"gate_valid": False, "manifest_split_sha256": "S"}, out)  # partial / unchecked
-    assert not g0.json_current(out, [inp], "S")
-    write_json({"gate_valid": True, "manifest_split_sha256": "S"}, out)
+    write_json(ok, out)
+    assert g0.json_current(out, [inp], "S", "E")
+    assert not g0.json_current(out, [inp], None, "E")  # manifest check failed
+    assert not g0.json_current(out, [inp], "T", "E")  # other split entry
+    assert not g0.json_current(out, [inp], "S", "F")  # other B1 exclusion file
+    assert not g0.json_current(out, [inp, tmp_path / "missing"], "S", "E")
+    write_json(dict(ok, gate_valid=False), out)  # partial / unchecked / robustness view
+    assert not g0.json_current(out, [inp], "S", "E")
+    assert g0.json_current(out, [inp], "S", "E", valid=False)  # margins written without the base
+    write_json({k: v for k, v in ok.items() if k != "analysis_exclusion"}, out)  # made before the B1 exclusion: recomputed
+    assert not g0.json_current(out, [inp], "S", "E")
+    write_json(ok, out)
     time.sleep(0.01)
     inp.write_text("y")  # input regenerated after the output: stale
-    assert not g0.json_current(out, [inp], "S")
+    assert not g0.json_current(out, [inp], "S", "E")
 
 
 def test_second_driver_refused(tmp_path):
