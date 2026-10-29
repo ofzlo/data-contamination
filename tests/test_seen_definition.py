@@ -1,11 +1,9 @@
 """Seen definition (prereg Section 2, 2026-10-28): seen = the N_exp exposure set, seen_unexposed reported only."""
 
 import json
-import os
 import subprocess
 import sys
 from glob import glob
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -15,10 +13,12 @@ from contam.config import REPO_ROOT, content_hash, load_config, read_json, write
 from contam.data.exposure import exposure_ids
 from contam.data.splits import make_split
 from contam.eval.evaluate import analysis_ids, check_seen, compare, evaluate_checkpoint, load_analysis_exclusion, load_seen_definition, seen_record
-from contam.eval.gates import g1_report, g2_report, validate_g2_inputs, validate_inputs
+from contam.eval import detectors as det
+from contam.eval.gates import g1_report, g2_report, spec_exposure_problems, validate_g2_inputs, validate_inputs
 from contam.eval.stats import association_margin
-from tests.conftest import base_metrics, locked_split, make_annotations
+from tests.conftest import base_metrics, locked_split, make_annotations, seen_rec
 from tests.test_g2 import MARGINS, make_g2
+from tests.test_detectors import _load_script as g0_load
 from tests.test_run_g0_eval import g0
 
 N_EXP = 60  # not a stored exposure set of the synthetic split (100 / 25 / 6): rebuilt from the annotations
@@ -280,9 +280,100 @@ def test_evaluate_checkpoint_cli_reuse_scores(tmp_path, synth):
     m2 = read_json(out)
     assert m2["seen_definition"] == seen_record(seen) and m2["summary"]["seen"]["cider_heldout"] == -1.0
     assert m2["per_image"]["0"]["word_count"] > 0  # non-Q fields are recomputed
-    # other generations: not reused
-    os.utime(out, (0, 0))  # older than its generations
+    # --reuse-scores-from: reuse another (read-only) file, write --out; a mismatch is an error there
+    src, new = tmp_path / "src.json", tmp_path / "new.json"
+    write_json(m2, src)
+    rf = [c if c != str(out) else str(new) for c in cmd]
+    r = subprocess.run(rf + ["--reuse-scores-from", str(src)], capture_output=True, text=True, cwd=REPO_ROOT)
+    assert r.returncode == 0, r.stderr
+    assert read_json(new)["summary"]["seen"]["cider_heldout"] == -1.0 and read_json(src) == m2
+    write_json(dict(m2, generations_hash="other"), src)
+    r = subprocess.run(rf + ["--reuse-scores-from", str(src)], capture_output=True, text=True, cwd=REPO_ROOT)
+    assert r.returncode != 0 and "other generations" in r.stderr
+    r = subprocess.run(rf + ["--reuse-scores-from", str(tmp_path / "missing.json")], capture_output=True, text=True, cwd=REPO_ROOT)
+    assert r.returncode != 0 and "no " in r.stderr
+    # --reuse-scores on other generations: scored from scratch
+    write_json(dict(m2, generations_hash="other"), out)
     r = subprocess.run(cmd + ["--reuse-scores"], capture_output=True, text=True, cwd=REPO_ROOT)
-    assert r.returncode == 0 and "older than its generations" in r.stdout
+    assert r.returncode == 0 and "other generations; scoring from scratch" in r.stdout
     assert read_json(out)["summary"]["seen"]["cider_heldout"] != -1.0
-    assert Path(out).exists()
+
+
+# ----------------------------------------------------------------------------- detectors
+
+
+def test_detector_groups_use_the_exposure_set(synth):
+    ann, split, seen = synth
+    cfg = load_config()
+    cfg["analysis"]["exclude_image_ids_file"] = None
+    g, _ = det.detector_groups(cfg, split, "cdd", seen=seen)
+    assert g["seen"] == seen["image_ids"] and g["unseen"] == sorted(split["unseen"])
+    assert g["seen_unexposed"] == sorted(set(split["seen"]) - set(seen["image_ids"]))
+    cfg["detectors"]["dcq"]["n_per_group"] = 10
+    g2, _ = det.detector_groups(cfg, split, "dcq", seen=seen)
+    assert set(g2["seen"]) <= set(seen["image_ids"]) and set(g2["seen_unexposed"]) <= set(g["seen_unexposed"]) and all(len(v) == 10 for v in g2.values())
+    legacy, _ = det.detector_groups(cfg, split, "cdd")
+    assert legacy["seen"] == sorted(split["seen"]) and "seen_unexposed" not in legacy
+    # the C9 numbers (seen vs unseen) ignore seen_unexposed; it is summarized on its own
+    scores = {i: (1.0 if i in seen["image_ids"] else 0.0) for i in split["seen"] + split["unseen"]}
+    s = det.group_summary(scores, g, n_boot=50)
+    assert s["auroc"]["estimate"] == 1.0 and s["seen_unexposed"]["mean"] == 0.0 and s["auroc_seen_unexposed"]["estimate"] == 0.5
+    assert s["seen_minus_unseen"]["estimate"] == 1.0 and s["seen_unexposed_minus_unseen"]["estimate"] == 0.0
+
+
+def test_detector_report_refuses_mixed_seen_definitions(tmp_path, synth):
+    ann, split, seen = synth
+    rd = g0_load("run_detectors")
+    base = {"detector": "cdd", "gate_valid": True, "manifest_split_sha256": "L",
+            "summary": {"seen": {"mean": 0.1}, "unseen": {"mean": 0.1}, "seen_minus_unseen": {"estimate": 0.0}, "auroc": {"estimate": 0.5, "ci_lo": 0.4, "ci_hi": 0.6}}}
+    write_json(dict(base, checkpoint_id="G0_d0_s0", seen_definition=seen_record(seen)), tmp_path / "a.json")
+    write_json(dict(base, checkpoint_id="G0_d0_s1", seen_definition=None), tmp_path / "b.json")
+    with pytest.raises(SystemExit, match="different seen definitions"):
+        rd.report([tmp_path / "a.json", tmp_path / "b.json"], "G0_d0")
+    write_json(dict(base, checkpoint_id="G0_d0_s1", seen_definition=seen_record(seen)), tmp_path / "b.json")
+    assert rd.report([tmp_path / "a.json", tmp_path / "b.json"], "G0_d0")["seen_definition"] == seen_record(seen)
+
+
+# ----------------------------------------------------------------------------- G1 run specs vs the seen set
+
+
+def test_spec_exposure_problems(tmp_path, synth):
+    ann, split, seen = synth
+    cks = [{"metrics": "m.json"}]
+    ms = [{"checkpoint_id": "G1_Paired_d4_s0"}]
+    assert spec_exposure_problems(tmp_path / "nope", cks, ms, seen, split["name"]) == []  # no specs: skipped
+    assert "no run spec" in spec_exposure_problems(tmp_path, cks, ms, seen, split["name"])[0]
+    write_json({"split": split["name"], "exposure": {"exposure_ids_sha256": seen["ids_sha256"]}}, tmp_path / "G1_Paired_d4_s0.json")
+    assert spec_exposure_problems(tmp_path, cks, ms, seen, split["name"]) == []
+    write_json({"split": split["name"], "exposure": {"exposure_ids_sha256": "other"}}, tmp_path / "G1_Paired_d4_s0.json")
+    assert "trained on split" in spec_exposure_problems(tmp_path, cks, ms, seen, split["name"])[0]
+
+
+# ----------------------------------------------------------------------------- run_g0_eval re-evaluates a stale base
+
+
+def test_run_g0_eval_reevaluates_a_stale_base_from_stored_scores(tmp_path, capsys):
+    from tests.test_run_g0_eval import _base, _g0_env
+
+    ann, split, cfg, lock, split_sha, argv = _g0_env(tmp_path)
+    base = tmp_path / "outputs" / "g0" / "base_metrics_v.json"
+    stale = {k: v for k, v in _base(cfg, split, split_sha).items()}
+    stale["seen_definition"] = None  # evaluated before the seen definition; generations current
+    write_json(stale, base)
+    args = g0.argparse.Namespace(runs=g0.parse_runs([a.removeprefix("--run=") for a in argv[6:]]), config=None, lock=lock, split=argv[5], base=base)
+    chain = g0.Chain(tmp_path / "c.log", dry_run=True)
+    _, final = g0.plan(chain, args, cfg, split, split_sha)
+    assert [s.name for s in final] == ["G0/compute_margins"] and "--base" not in final[0].cmd  # no stored base generations / log-probs: as before
+    for p in (tmp_path / "outputs" / "g0" / "base_caption.jsonl", tmp_path / "outputs" / "logprobs" / "base.jsonl"):
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("")
+    _, final = g0.plan(chain, args, cfg, split, split_sha)
+    assert [s.name for s in final] == ["G0/base_evaluate", "G0/compute_margins"] and "--base" in final[1].cmd
+    ev = final[0].cmd
+    assert "--reuse-scores" in ev and ev[ev.index("--out") + 1] == str(base) and ev[ev.index("--checkpoint-id") + 1] == "base"
+    assert not final[0].done()
+    write_json(dict(stale, seen_definition=seen_rec(split)), base)  # what the stage writes
+    assert final[0].done()
+    write_json(_base(cfg, split, split_sha, prompt_sha="old p_cap"), base)  # stale generations: never re-evaluated, only regenerated
+    _, final = g0.plan(chain, args, cfg, split, split_sha)
+    assert [s.name for s in final] == ["G0/compute_margins"] and "--base" not in final[0].cmd

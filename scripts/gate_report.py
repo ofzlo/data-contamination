@@ -18,12 +18,13 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 
 from contam.config import load_config, load_yaml, read_json, write_json
 from contam.data.freeze import add_check_args, cli_check
 from contam.data.nocaps import load_annotations
 from contam.eval.evaluate import load_analysis_exclusion, load_seen_definition, mark_validity
-from contam.eval.gates import g1_report, validate_inputs
+from contam.eval.gates import g1_report, spec_exposure_problems, validate_inputs
 
 
 def main() -> None:
@@ -31,10 +32,11 @@ def main() -> None:
     ap.add_argument("--config", default=None)
     ap.add_argument("--manifest", required=True)
     ap.add_argument("--allow-partial", action="store_true", help="smoke tests only: allow partial metrics / non-standard baseline; output is NOT gate-valid")
-    ap.add_argument("--n-exp", type=int, default=None, help="seen group = the first N_exp exposed images of the split (default: exposure.n_exp; C2 arms: 563 / 141)")
+    ap.add_argument("--n-exp", type=int, default=None, help="seen group = the first N_exp exposed images of the split (default: exposure.n_exp; C2 arms: 141, the shared 3.125% set, in every arm)")
     ap.add_argument("--annotations", default=None, help="needed only for an --n-exp that is not a stored exposure set (default: paths.annotations)")
     add_check_args(ap)
     ap.add_argument("--include-b1-overlap", action="store_true", help="robustness view: keep the B1 analysis exclusion images in every result; output is NOT gate-valid")
+    ap.add_argument("--specs", default=None, help="build_g1.py run specs to cross-check exposure sets against (default: <outputs_dir>/runs/G1; skipped if absent)")
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
 
@@ -49,6 +51,13 @@ def main() -> None:
     excl = load_analysis_exclusion(cfg, args.include_b1_overlap)
     seen = load_seen_definition(cfg, split, load_annotations(args.annotations) if args.annotations else None, args.n_exp)
     validate_inputs(split, margins, man["baseline"], base, cks, cms, cfg["gates"]["g1_seeds_per_cell"], args.allow_partial, frozen["manifest_split_sha256"], excl, seen)
+    specs = args.specs or os.path.join(cfg["paths"]["outputs_dir"], "runs", "G1")
+    problems = spec_exposure_problems(specs, cks, cms, seen, split["name"])
+    if problems:
+        msg = "checkpoints not trained on the analysis seen set:\n  " + "\n  ".join(problems)
+        if not args.allow_partial:
+            raise SystemExit(msg + "\n(--allow-partial: warn only, output NOT gate-valid)")
+        print(f"WARNING: {msg}", file=sys.stderr)
     report = g1_report(split, margins, base, cks, cms, cfg, args.allow_partial, excl, seen)
     report.update(frozen)
     mark_validity(report, not args.allow_partial and frozen["manifest_split_sha256"] is not None, excl)

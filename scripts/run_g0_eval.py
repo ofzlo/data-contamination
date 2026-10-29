@@ -262,6 +262,12 @@ def json_current(path: Path, inputs: Sequence[Path], split_sha: str | None, excl
             and seen_matches(m, seen) and all(path.stat().st_mtime >= p.stat().st_mtime for p in inputs))
 
 
+def generated_current(path: Path, model_prov: dict) -> bool:
+    """The metrics at ``path`` come from generations made with the current p_cap / model."""
+    gen = read_json(path).get("provenance", {}).get("generations", {})
+    return all(gen.get(k) == v for k, v in model_prov.items())
+
+
 def base_problem(path: Path, model_prov: dict, split: dict, split_sha: str | None, excl_sha: str, seen: dict | None = None) -> str | None:
     """Why the untrained-base metrics cannot serve the G0 base check; None if they are current: generated
     with the current caption prompt and model, and evaluated completely on this split, its current lock
@@ -269,8 +275,7 @@ def base_problem(path: Path, model_prov: dict, split: dict, split_sha: str | Non
     if not path.exists():
         return f"no untrained-base metrics {path}"
     m = read_json(path)
-    gen = m.get("provenance", {}).get("generations", {})
-    if not all(gen.get(k) == v for k, v in model_prov.items()):
+    if not generated_current(path, model_prov):
         return f"untrained-base metrics {path} were not generated with the current p_cap / model (regenerate and re-evaluate the base)"
     if (not m.get("complete") or m.get("split", {}).get("content_hash") != split["content_hash"] or split_sha is None
             or m.get("manifest_split_sha256") != split_sha or (m.get("analysis_exclusion") or {}).get("sha256") != excl_sha or not seen_matches(m, seen)):
@@ -316,6 +321,15 @@ def plan(chain: Chain, args, cfg: dict, split: dict, split_sha: str | None) -> t
         base = Path(args.base)
         cmd = py + [str(REPO_ROOT / "scripts/compute_margins.py"), *common, *sp, "--d0", *map(str, metrics), "--out", str(margins)]
         problem = base_problem(base, model_prov, split, split_sha, excl_sha, seen)
+        base_gens, base_lp = g0 / "base_caption.jsonl", lp_dir / "base.jsonl"
+        if problem is not None and base.exists() and base_gens.exists() and base_lp.exists() and generated_current(base, model_prov):
+            # generations current, only the evaluation is stale (e.g. an older seen definition): re-evaluate it from its stored scores first
+            base_id = read_json(base).get("checkpoint_id") or "base"
+            final.append(Stage("G0/base_evaluate", py + [str(REPO_ROOT / "scripts/evaluate_checkpoint.py"), *common, "--checkpoint-id", base_id, "--generations", str(base_gens),
+                                                           "--logprobs", str(base_lp), *sp, "--prompt-id", PROMPT_ID, "--reuse-scores", "--out", str(base)],
+                               lambda: base_problem(base, model_prov, split, split_sha, excl_sha, seen) is None, logs / "base_evaluate.log"))
+            chain.log(f"note: {problem}; re-evaluating it first (G0/base_evaluate, CPU, stored scores reused)")
+            problem = None
         if problem is None:
             cmd[-2:-2] = ["--base", str(base)]
 
@@ -431,9 +445,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     if args.dry_run:
         chain.log("DRY RUN: nothing was run")
         return
-    if final and not final[0].done():
-        chain.log(f"G0 incomplete: base missing/stale (see the WARNING above); margins in {final[0].log.parent} are NOT gate-valid")
-    result = f"margins and report in {final[0].log.parent}" if final else "margins not computed"
+    if final and not final[-1].done():
+        chain.log(f"G0 incomplete: base missing/stale (see the WARNING above); margins in {final[-1].log.parent} are NOT gate-valid")
+    result = f"margins and report in {final[-1].log.parent}" if final else "margins not computed"
     chain.log(f"DONE: {len(jobs)} d=0 checkpoint(s) evaluated on split {split['name']}; {result}; {(time.time() - t0) / 3600:.2f} h")
 
 

@@ -151,6 +151,30 @@ def validate_inputs(
             raise ValueError(f"baseline and checkpoint generations must share one recorded {f}; got {sorted(map(str, vals))}")
 
 
+def spec_exposure_problems(spec_dir, checkpoints: Sequence[dict], cell_metrics: Sequence[dict], seen: dict | None, split_name: str) -> list[str]:
+    """Checkpoints whose build_g1.py run spec (``<spec_dir>/<checkpoint_id>.json``) trained on another
+    exposure set than the analysis's seen set (spec ``exposure.exposure_ids_sha256`` vs ``seen``), or
+    has no spec. Empty if ``spec_dir`` does not exist."""
+    if seen is None or not os.path.isdir(spec_dir):
+        return []
+    import json
+
+    out = []
+    for c, m in zip(checkpoints, cell_metrics):
+        rid = m.get("checkpoint_id")
+        p = os.path.join(spec_dir, f"{rid}.json")
+        if not os.path.exists(p):
+            out.append(f"{c['metrics']}: no run spec {p} for checkpoint {rid!r}")
+            continue
+        with open(p) as f:
+            spec = json.load(f)
+        got = (spec.get("exposure") or {}).get("exposure_ids_sha256")
+        if spec.get("split") != split_name or got != seen["ids_sha256"]:
+            out.append(f"{rid}: run spec {p} trained on split {spec.get('split')} exposure set {str(got)[:12]}, but the analysis seen set is "
+                       f"{split_name} N_exp={seen['n_exp']} ({seen['ids_sha256'][:12]})")
+    return out
+
+
 def g1_report(
     split: dict, margins: dict, baseline: Sequence[dict], checkpoints: Sequence[dict], cell_metrics: Sequence[dict], cfg: dict, allow_partial: bool = False, exclusion: dict | None = None,
     seen: dict | None = None,

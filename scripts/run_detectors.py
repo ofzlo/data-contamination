@@ -5,7 +5,9 @@ Definitions and deviations from the papers: ``contam.eval.detectors``. Settings:
 configs/default.yaml. Every phase writes one JSON with per-image (or per-set) scores, the seen and
 unseen means, their difference and the seen-vs-unseen AUROC with bootstrap CIs, plus provenance.
 The B1 analysis exclusion (``analysis.exclude_image_ids_file``) is applied unless
-``--keep-excluded`` is set.
+``--keep-excluded`` is set. Seen is the exposure set (``exposure.n_exp`` / ``--n-exp``, recorded as
+``seen_definition``); seen_unexposed is scored and summarized separately, never in the C9 rule, and
+the report refuses inputs with different seen definitions.
 
 Phases:
 
@@ -29,6 +31,7 @@ Examples:
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -62,6 +65,7 @@ def main(argv=None) -> None:
     ap.add_argument("--keep-excluded", action="store_true", help="robustness check: keep the B1 exclusion images")
     ap.add_argument("--inputs", nargs="*", default=[], help="report: detector result files")
     ap.add_argument("--d0-prefix", default="G0_d0", help="report: checkpoint ids of the d=0 seeds start with this")
+    ap.add_argument("--n-exp", type=int, default=None, help="seen group = the first N_exp exposed images of the split (default: exposure.n_exp)")
     ap.add_argument("--out", required=True)
     add_check_args(ap)
     args = ap.parse_args(argv)
@@ -77,19 +81,21 @@ def main(argv=None) -> None:
 
     from contam.data.nocaps import ImageLoader, load_annotations, refs_by_id
     from contam.data.splits import check_annotations
+    from contam.eval.evaluate import load_seen_definition, seen_record
 
     dcfg = cfg["detectors"][args.phase]
     st = cfg["stats"]
     ann = load_annotations(cfg["paths"]["annotations"])
     split = read_json(args.split)
     check_annotations(split, ann)
-    groups, excluded = det.detector_groups(cfg, split, args.phase, args.keep_excluded)
+    seen = load_seen_definition(cfg, split, ann, args.n_exp)
+    groups, excluded = det.detector_groups(cfg, split, args.phase, args.keep_excluded, seen)
     if args.max_images:
         groups = {g: v[: args.max_images] for g, v in groups.items()}
     prompts = load_prompts(args.prompts)
     out = {
         "detector": args.phase, "checkpoint_id": args.checkpoint_id, "model": args.model or cfg["models"]["main"], "adapter": args.adapter,
-        "split": split.get("name"), "settings": dcfg, "excluded_image_ids": excluded, **frozen,
+        "split": split.get("name"), "settings": dcfg, "excluded_image_ids": excluded, "seen_definition": seen_record(seen), **frozen,
         "gate_valid": frozen["manifest_split_sha256"] is not None and not args.max_images and not args.keep_excluded,
         "groups": groups,
     }
@@ -98,7 +104,7 @@ def main(argv=None) -> None:
     if args.phase == "cdd":
         if not args.greedy or not args.samples:
             ap.error("cdd needs --greedy and --samples")
-        ids = groups["seen"] + groups["unseen"]
+        ids = sorted({i for v in groups.values() for i in v})
         want = set(ids)
         psha = prompt_sha(prompts[args.prompt_id])
         rows = [r for r in read_jsonl(args.greedy) if r["prompt_id"] == args.prompt_id and int(r["image_id"]) in want]
@@ -111,7 +117,7 @@ def main(argv=None) -> None:
         out["n_samples_per_image"] = int(np.median([sum(1 for r in samp if int(r["image_id"]) == i) for i in ids[:50]]))
         out["per_image"] = peaks
         out["summary"] = det.group_summary(peaks, groups, **kw)
-        out["summary"]["leaked_rate"] = {g: float(np.mean([peaks[i] > dcfg["xi"] for i in groups[g]])) for g in ("seen", "unseen")}
+        out["summary"]["leaked_rate"] = {g: float(np.mean([peaks[i] > dcfg["xi"] for i in groups[g]])) for g in groups if groups[g]}
 
     elif args.phase == "dcq":
         if not args.perturbations:
@@ -125,7 +131,7 @@ def main(argv=None) -> None:
         out["perturbations_file"] = str(args.perturbations)
         out["perturbations_sha256"] = file_sha256(args.perturbations)
         out["per_group"], per_image = {}, {}
-        for g in ("seen", "unseen"):
+        for g in (g for g in det.DETECTOR_GROUPS if groups.get(g)):
             items = det.dcq_items(pert, split, refs, groups[g])
             answers = det.run_dcq(vlm, loader, items, template, max_new_tokens=dcfg["max_new_tokens"])
             bdq = {i: a["letter"] for i, a in answers["bdq"].items()}
@@ -143,7 +149,7 @@ def main(argv=None) -> None:
         out["prompt_sha"] = prompt_sha(prompt)
         vlm = load_vlm(args, cfg)
         out["per_group"] = {}
-        for g in ("seen", "unseen"):
+        for g in (g for g in det.DETECTOR_GROUPS if groups.get(g)):
             ids = groups[g]
             train = [refs[i][int(split["train_ref_idx"][str(i)])] for i in ids]
             Z = embed_all(vlm, loader, ids, prompt, train, dcfg["embed_batch_size"])
@@ -161,7 +167,9 @@ def main(argv=None) -> None:
             out["per_group"][g]["per_image_shift"] = {int(i): float(v) for i, v in zip(ids, np.linalg.norm(det.l2_normalize(Z_ft) - det.l2_normalize(Z), axis=1))}
         out["summary"] = {"kds_seen": out["per_group"]["seen"]["kds"], "kds_unseen": out["per_group"]["unseen"]["kds"],
                           "seen_minus_unseen": out["per_group"]["seen"]["kds"] - out["per_group"]["unseen"]["kds"]}
-        shifts = {**out["per_group"]["seen"]["per_image_shift"], **out["per_group"]["unseen"]["per_image_shift"]}
+        if "seen_unexposed" in out["per_group"]:  # reported only
+            out["summary"]["kds_seen_unexposed"] = out["per_group"]["seen_unexposed"]["kds"]
+        shifts = {i: v for g in out["per_group"].values() for i, v in g["per_image_shift"].items()}
         # smaller shift = more "seen-like"; negate so AUROC > 0.5 means seen images move less
         out["summary"]["shift"] = det.group_summary({i: -v for i, v in shifts.items()}, groups, **kw)
 
@@ -183,18 +191,25 @@ def embed_all(vlm, loader, ids, prompt, refs, batch_size: int) -> np.ndarray:
 
 
 def _headline(res: dict) -> dict:
+    """Seen (exposure set) vs unseen numbers for the C9 rule, plus the seen_unexposed ones (reported only)."""
     s = res["summary"]
     if res["detector"] == "kds":
-        return {"seen": s["kds_seen"], "unseen": s["kds_unseen"], "seen_minus_unseen": s["seen_minus_unseen"], "auroc": s["shift"]["auroc"]["estimate"]}
-    return {"seen": s["seen"]["mean"], "unseen": s["unseen"]["mean"], "seen_minus_unseen": s["seen_minus_unseen"]["estimate"], "auroc": s["auroc"]["estimate"],
-            "auroc_ci": [s["auroc"]["ci_lo"], s["auroc"]["ci_hi"]]}
+        h = {"seen": s["kds_seen"], "unseen": s["kds_unseen"], "seen_minus_unseen": s["seen_minus_unseen"], "auroc": s["shift"]["auroc"]["estimate"]}
+        if "kds_seen_unexposed" in s:
+            h["seen_unexposed"] = s["kds_seen_unexposed"]
+        return h
+    h = {"seen": s["seen"]["mean"], "unseen": s["unseen"]["mean"], "seen_minus_unseen": s["seen_minus_unseen"]["estimate"], "auroc": s["auroc"]["estimate"],
+         "auroc_ci": [s["auroc"]["ci_lo"], s["auroc"]["ci_hi"]]}
+    if "seen_unexposed" in s:
+        h.update(seen_unexposed=s["seen_unexposed"]["mean"], seen_unexposed_minus_unseen=s["seen_unexposed_minus_unseen"]["estimate"], auroc_seen_unexposed=s["auroc_seen_unexposed"]["estimate"])
+    return h
 
 
 def report(paths, d0_prefix: str) -> dict:
     """Per detector: every checkpoint's headline numbers, and mean / SD (ddof 1) across the d=0 seeds."""
     rows: dict[str, dict[str, dict]] = {}
     valid = True
-    shas = set()
+    shas, seen_defs = set(), set()
     for p in paths:
         r = read_json(p)
         if "detector" not in r:
@@ -202,10 +217,13 @@ def report(paths, d0_prefix: str) -> dict:
         rows.setdefault(r["detector"], {})[r["checkpoint_id"]] = _headline(r)
         valid &= bool(r.get("gate_valid"))
         shas.add(r.get("manifest_split_sha256"))
+        seen_defs.add(json.dumps(r.get("seen_definition"), sort_keys=True))
     if len(shas) > 1:
         print(f"WARNING: inputs come from {len(shas)} different split lock entries", file=sys.stderr)
         valid = False
-    out = {"gate_valid": valid, "manifest_split_sha256": sorted(shas, key=str), "detectors": {}}
+    if len(seen_defs) > 1:
+        raise SystemExit(f"detector results record different seen definitions {sorted(seen_defs)}; re-run them under one (exposure.n_exp / --n-exp)")
+    out = {"gate_valid": valid, "manifest_split_sha256": sorted(shas, key=str), "seen_definition": json.loads(seen_defs.pop()) if seen_defs else None, "detectors": {}}
     for d, by_ck in rows.items():
         d0 = [v for k, v in by_ck.items() if k.startswith(d0_prefix)]
         spread = {}

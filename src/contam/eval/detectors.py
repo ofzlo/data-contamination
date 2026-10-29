@@ -4,7 +4,9 @@ Every detector gives a per-image score (CDD, DCQ) or a per-set score (KDS). Each
 and the unseen images of a split, so on the untrained base and the d=0 models a detector should show
 no seen/unseen difference (its false-positive behaviour), and on exposed checkpoints C9 asks which
 regime (exposure, memorization, inflation) it follows. Image ids on the B1 analysis exclusion list
-are dropped from the groups unless the caller keeps them (prereg Section 2).
+are dropped from the groups unless the caller keeps them (prereg Section 2). The seen group is the
+exposure set (``seen``, contam.eval.evaluate.load_seen_definition); the rest of the split's seen half
+(``seen_unexposed``) is scored and summarized separately and is not part of the C9 rule.
 
 CDD (Dong et al. 2024, "Generalization or Memorization", eqs. 4 to 7)
 -------------------------------------------------------------------
@@ -64,6 +66,7 @@ import numpy as np
 from contam.eval.memory import normalize
 
 LETTERS = "ABCDE"
+DETECTOR_GROUPS = ("seen", "unseen", "seen_unexposed")  # seen_unexposed: reported only, never in the C9 rule
 NONE_OPTION = "None of the provided options."
 
 
@@ -86,9 +89,15 @@ def load_exclusion(path: str | Path | None) -> set[int]:
     return out
 
 
-def split_groups(split: Mapping, exclude: set[int] = frozenset()) -> dict[str, list[int]]:
-    """``{"seen": ids, "unseen": ids}`` without the excluded ids, sorted."""
-    return {g: sorted(int(i) for i in split[g] if int(i) not in exclude) for g in ("seen", "unseen")}
+def split_groups(split: Mapping, exclude: set[int] = frozenset(), seen: Mapping | None = None) -> dict[str, list[int]]:
+    """``{"seen": ids, "unseen": ids}`` without the excluded ids, sorted. With ``seen`` (a seen
+    definition) seen is its exposure set and ``seen_unexposed`` the rest of the split's seen half."""
+    if seen is None:
+        raw = {g: split[g] for g in ("seen", "unseen")}
+    else:
+        exp = {int(i) for i in seen["image_ids"]}
+        raw = {"seen": exp, "unseen": split["unseen"], "seen_unexposed": [i for i in split["seen"] if int(i) not in exp]}
+    return {g: sorted(int(i) for i in v if int(i) not in exclude) for g, v in raw.items()}
 
 
 def subset(ids: Sequence[int], n: int, seed: int) -> list[int]:
@@ -99,17 +108,17 @@ def subset(ids: Sequence[int], n: int, seed: int) -> list[int]:
     return sorted(int(i) for i in np.random.default_rng(seed).choice(ids, size=n, replace=False))
 
 
-def detector_groups(cfg: Mapping, split: Mapping, detector: str, keep_excluded: bool = False) -> tuple[dict[str, list[int]], list[int]]:
-    """The images ``detector`` runs on: seen / unseen without the B1 exclusion (unless kept), cut to
-    ``detectors.<detector>.n_per_group`` for DCQ and KDS. Seen and unseen draw from separate streams
-    (``sample_seed`` + 0 / + 1), so one group's subset does not depend on the other. Returns
-    (groups, excluded ids)."""
+def detector_groups(cfg: Mapping, split: Mapping, detector: str, keep_excluded: bool = False, seen: Mapping | None = None) -> tuple[dict[str, list[int]], list[int]]:
+    """The images ``detector`` runs on: seen (the exposure set ``seen``) / unseen / seen_unexposed
+    without the B1 exclusion (unless kept), cut to ``detectors.<detector>.n_per_group`` for DCQ and
+    KDS. The groups draw from separate streams (``sample_seed`` + 0 / + 1 / + 2), so one group's
+    subset does not depend on the others. Returns (groups, excluded ids)."""
     excl_file = cfg.get("analysis", {}).get("exclude_image_ids_file")
     excl = set() if keep_excluded else load_exclusion(excl_file)
-    groups = split_groups(split, excl)
+    groups = split_groups(split, excl, seen)
     dcfg = cfg["detectors"][detector]
     if "n_per_group" in dcfg:
-        groups = {g: subset(groups[g], dcfg["n_per_group"], dcfg["sample_seed"] + k) for k, g in enumerate(("seen", "unseen"))}
+        groups = {g: subset(groups[g], dcfg["n_per_group"], dcfg["sample_seed"] + k) for k, g in enumerate(DETECTOR_GROUPS) if g in groups}
     return groups, sorted(excl)
 
 
@@ -345,14 +354,21 @@ def auroc(pos: Sequence[float], neg: Sequence[float]) -> float:
 
 def group_summary(scores: Mapping[int, float], groups: Mapping[str, Sequence[int]], n_boot: int = 2000, seed: int = 0, ci: float = 0.95) -> dict:
     """Seen / unseen means, their difference and the seen-vs-unseen AUROC, with bootstrap CIs
-    (seen and unseen resampled separately, ``contam.eval.stats``)."""
+    (groups resampled separately, ``contam.eval.stats``). A non-empty ``seen_unexposed`` group gets
+    the same against unseen (``seen_unexposed_minus_unseen``, ``auroc_seen_unexposed``; reported only)."""
     from contam.eval.stats import paired_bootstrap
 
-    data = {g: {"x": np.array([scores[i] for i in groups[g]], float)} for g in ("seen", "unseen")}
+    names = [g for g in DETECTOR_GROUPS if groups.get(g)]
+    data = {g: {"x": np.array([scores[i] for i in groups[g]], float)} for g in names}
     out = {g: {"n": len(groups[g]), "mean": float(data[g]["x"].mean()), "sd": float(data[g]["x"].std(ddof=1)) if len(groups[g]) > 1 else float("nan")} for g in data}
     kw = dict(n_boot=n_boot, seed=seed, ci=ci)
-    out["seen_minus_unseen"] = paired_bootstrap(lambda d: float(d["seen"]["x"].mean() - d["unseen"]["x"].mean()), data, **kw).to_dict()
-    out["auroc"] = paired_bootstrap(lambda d: auroc(d["seen"]["x"], d["unseen"]["x"]), data, **kw).to_dict()
+    pair = {g: data[g] for g in ("seen", "unseen")}
+    out["seen_minus_unseen"] = paired_bootstrap(lambda d: float(d["seen"]["x"].mean() - d["unseen"]["x"].mean()), pair, **kw).to_dict()
+    out["auroc"] = paired_bootstrap(lambda d: auroc(d["seen"]["x"], d["unseen"]["x"]), pair, **kw).to_dict()
+    if "seen_unexposed" in data:
+        pu = {g: data[g] for g in ("seen_unexposed", "unseen")}
+        out["seen_unexposed_minus_unseen"] = paired_bootstrap(lambda d: float(d["seen_unexposed"]["x"].mean() - d["unseen"]["x"].mean()), pu, **kw).to_dict()
+        out["auroc_seen_unexposed"] = paired_bootstrap(lambda d: auroc(d["seen_unexposed"]["x"], d["unseen"]["x"]), pu, **kw).to_dict()
     return out
 
 

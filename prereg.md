@@ -115,12 +115,14 @@ proposal (`docs/CSE576_Project.pdf`): eq. 1 generation, eq. 2 group score, eq. 3
   - `unseen`: the complement of the 50% set (2,250), unchanged.
   - `seen_unexposed`: the 50% set minus the exposure set (1,250). Reported next to seen and unseen
     everywhere (group means, by domain, S / V changes, Δ with seen_unexposed in place of seen, G1 /
-    G2 effects, margins per seed); never part of a gate decision.
+    G2 effects, margins per seed, B6 detector scores and AUROC vs unseen); never part of a gate
+    decision or of the C9 detector rule.
   This applies to every group statistic: summaries, Δ / Γ, bootstrap index vectors, G0 margins
   (δ_A is 2 × SD of the d=0 seeds' exposure-set − unseen gap; δ_S, unseen only, is unchanged), G1,
   and G2 including τ and the two-level bootstrap. The seen set is a recorded per-analysis parameter
   (`seen_definition: {kind: exposure, n_exp, ids_sha256}`, default `exposure.n_exp`, `--n-exp` on
-  the eval CLIs), so C2's breadth arms can use n_exp = 563 / 141. Every metrics / margins / gate JSON
+  the eval CLIs). C2's breadth arms keep the rule above: their seen metrics use the shared 3.125%
+  set in every arm, i.e. they are evaluated with `--n-exp 141`. Every metrics / margins / gate JSON
   records it; the gates and `compute_margins.py` refuse inputs that record another one or none
   (JSONs from before this decision), and `run_g0_eval.py` treats those as stale and recomputes them
   from the stored per-image scores (`evaluate_checkpoint.py --reuse-scores`: no SPICE run, no GPU).
@@ -536,3 +538,6 @@ reading implemented in `scripts/gate_report.py`.
 - 2026-10-28: locked by Yoorhim at the proposed values (header table), before the first exposed
   run. TODO(team): record each member's confirmation here; a disagreement is resolved by amendment
   before the G1 results are seen.
+- 2026-10-28: Section 2 seen-definition details (exposure-set selection, ids sha256 per split,
+  groups seen / unseen / seen_unexposed, B1 counts A 4/9 and B 4/8) added to implement the
+  lock-table decision, before any exposed result was seen.

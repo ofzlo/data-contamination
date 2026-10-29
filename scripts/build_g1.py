@@ -188,7 +188,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--config", default=None)
     ap.add_argument("--M", type=int, required=True, help="total examples per run (D2)")
-    ap.add_argument("--n-exp", type=int, required=True, help="exposed images (D2)")
+    ap.add_argument("--n-exp", type=int, default=None, help="exposed images (D2; default: config exposure.n_exp)")
     ap.add_argument("--split", default="A")
     ap.add_argument("--conditions", nargs="+", default=["Caption", "Paired", "SameDist"], choices=list(CONDITIONS))
     ap.add_argument("--doses", nargs="+", type=int, default=[4, 64], choices=DOSES)
@@ -200,6 +200,8 @@ def main() -> None:
     ap.add_argument("--lock", default=str(DEFAULT_LOCK))
     args = ap.parse_args()
     cfg = load_config(args.config)
+    if args.n_exp is None:
+        args.n_exp = int(cfg["exposure"]["n_exp"])
     if set(args.conditions) & set(NOCAPS_IMAGE_CONDITIONS):
         ensure_nocaps_link(cfg, args.link_nocaps)
     out = Path(args.out) if args.out else Path(cfg["paths"]["outputs_dir"]) / "runs"

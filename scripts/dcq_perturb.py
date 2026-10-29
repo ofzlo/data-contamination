@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Word-level perturbations of the training references for the B6 DCQ quiz (contam.eval.detectors).
 
-For every image in the DCQ subset of a split (``detectors.dcq``: seen and unseen, B1 exclusion
+For every image in the DCQ subset of a split (``detectors.dcq``: seen = the exposure set, unseen and seen_unexposed; B1 exclusion
 applied), asks an instruction-tuned text LM (``detectors.dcq.perturb_model``) for four rewrites of
 the image's training reference that swap words for contextual synonyms and keep the sentence
 structure, as in Golchin & Surdeanu (2023). A rewrite set is kept only if it passes
@@ -81,6 +81,7 @@ def main(argv=None) -> None:
     ap.add_argument("--tries", type=int, default=5)
     ap.add_argument("--keep-excluded", action="store_true")
     ap.add_argument("--max-images", type=int, default=None, help="smoke tests: first N images per group")
+    ap.add_argument("--n-exp", type=int, default=None, help="seen group = the first N_exp exposed images of the split (default: exposure.n_exp)")
     ap.add_argument("--out", required=True)
     add_check_args(ap)
     args = ap.parse_args(argv)
@@ -89,14 +90,15 @@ def main(argv=None) -> None:
 
     from contam.data.nocaps import load_annotations, refs_by_id
     from contam.data.splits import check_annotations
+    from contam.eval.evaluate import load_seen_definition
 
     dcfg = cfg["detectors"]["dcq"]
     ann = load_annotations(cfg["paths"]["annotations"])
     split = read_json(args.split)
     check_annotations(split, ann)
     refs = refs_by_id(ann)
-    groups, _ = det.detector_groups(cfg, split, "dcq", args.keep_excluded)
-    ids = sorted(set(groups["seen"][: args.max_images]) | set(groups["unseen"][: args.max_images]))
+    groups, _ = det.detector_groups(cfg, split, "dcq", args.keep_excluded, load_seen_definition(cfg, split, ann, args.n_exp))
+    ids = sorted({i for v in groups.values() for i in v[: args.max_images]})  # seen (exposure set), unseen and seen_unexposed
     done = {int(r["image_id"]) for r in read_jsonl(args.out)} if Path(args.out).exists() else set()
     todo = [i for i in ids if i not in done]
     model_id = args.model or dcfg["perturb_model"]

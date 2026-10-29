@@ -51,7 +51,7 @@ exposure:
   shuffle_seed: 20261023
   # D2 N_exp: images every contamination run trains on (the first n_exp of the split's exposure order).
   # It is also the "seen" group of every analysis (prereg Section 2; contam.eval.evaluate.load_seen_definition);
-  # C2's breadth arms override it per analysis (--n-exp 563 / 141).
+  # C2's breadth arms evaluate seen on the shared 3.125% set in every arm (--n-exp 141; prereg Section 2).
   n_exp: 1000
 
 samedist:

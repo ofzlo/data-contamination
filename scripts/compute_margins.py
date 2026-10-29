@@ -52,7 +52,7 @@ def main() -> None:
     ap.add_argument("--split", default=None, help="split JSON the d=0 metrics were computed on (default: <splits_dir>/split_<name>.json)")
     ap.add_argument("--allow-partial", action="store_true", help="smoke tests only; output is NOT gate-valid")
     ap.add_argument("--include-b1-overlap", action="store_true", help="robustness view: keep the B1 analysis exclusion images; output is NOT gate-valid")
-    ap.add_argument("--n-exp", type=int, default=None, help="seen group = the first N_exp exposed images of the split (default: exposure.n_exp; C2 arms: 563 / 141)")
+    ap.add_argument("--n-exp", type=int, default=None, help="seen group = the first N_exp exposed images of the split (default: exposure.n_exp; C2 arms: 141, the shared 3.125% set, in every arm)")
     ap.add_argument("--annotations", default=None, help="needed only for an --n-exp that is not a stored exposure set (default: paths.annotations)")
     add_check_args(ap)
     ap.add_argument("--out", required=True)

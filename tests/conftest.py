@@ -39,6 +39,7 @@ def locked_split(tmp_path, split, n_boot=None):
     """
     raw = yaml.safe_load(DEFAULT_CONFIG.read_text())
     raw["paths"]["splits_dir"] = str(tmp_path / "splits")
+    raw["paths"]["outputs_dir"] = str(tmp_path / "outputs")  # never the repo's outputs/ (real run specs live there)
     raw["exposure"]["n_exp"] = len(split["seen"])  # the split's stored 50% set: no annotations needed (seen_def)
     if n_boot:
         raw["stats"]["n_boot"] = n_boot

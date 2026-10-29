@@ -26,7 +26,7 @@ from contam.config import load_config, load_prompts, load_yaml, read_json, write
 from contam.config import DEFAULT_PROMPTS
 from contam.data.freeze import add_check_args, cli_check
 from contam.data.nocaps import ImageLoader, load_annotations
-from contam.eval.evaluate import analysis_ids, evaluate_checkpoint, exclusion_record, load_analysis_exclusion, load_generations, mark_validity
+from contam.eval.evaluate import analysis_ids, evaluate_checkpoint, exclusion_record, load_analysis_exclusion, load_generations, load_seen_definition, mark_validity, seen_record
 from contam.eval.stats import bootstrap_paired_diff
 
 REPORT_FIELDS = ("cider_all10", "spice_all10", "cider_heldout", "spice_heldout", "word_count", "sentence_count", "boilerplate")
@@ -81,9 +81,10 @@ def main() -> None:
 
     st = cfg["stats"]
     excl = load_analysis_exclusion(cfg, args.include_b1_overlap)
+    seen = load_seen_definition(cfg, split, ann)
     an_ids = analysis_ids(split, "all", ids, excl)
     report = {"split": split["name"], "n_images": len(ids), "n_analysed": len(an_ids), "prompts": {p: prompts[p] for p in b3_ids}, **frozen,
-              "analysis_exclusion": exclusion_record(excl, split, ids), "models": {}}
+              "analysis_exclusion": exclusion_record(excl, split, ids, seen), "seen_definition": seen_record(seen), "models": {}}
     mark_validity(report, frozen["manifest_split_sha256"] is not None and args.max_images is None, excl)
     for name in tags:
         per_prompt = {}
@@ -92,7 +93,7 @@ def main() -> None:
             gens = {i: gens[i] for i in ids}
             per_prompt[pid] = evaluate_checkpoint(
                 gens, ann, split, boilerplate_patterns=cfg["style"]["boilerplate_patterns"], metrics=args.metrics, tokenizer=args.tokenizer,
-                spice_cache=cfg["paths"]["spice_cache"], require_all=args.max_images is None, checkpoint_id=f"{name}/{pid}", exclusion=excl,
+                spice_cache=cfg["paths"]["spice_cache"], require_all=args.max_images is None, checkpoint_id=f"{name}/{pid}", exclusion=excl, seen=seen,
             )
         rows = {pid: {f: per_prompt[pid]["summary"]["all"].get(f) for f in REPORT_FIELDS} for pid in b3_ids}
         diffs = {}

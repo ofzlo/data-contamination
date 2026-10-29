@@ -3,6 +3,7 @@
 import importlib.util
 import json
 import os
+import secrets
 import signal
 import subprocess
 import sys
@@ -74,9 +75,13 @@ def test_pipeline_overlaps_cpu_with_next_gpu_and_never_doubles(tmp_path):
     assert not any(_overlap(a, b) for i, a in enumerate(cpu) for b in cpu[i + 1 :])
     for k in range(3):
         assert iv[f"s{k}/eval"][0] >= iv[f"s{k}/score"][1] >= iv[f"s{k}/gen"][1]
-    assert _overlap(iv["s0/eval"], iv["s1/gen"])  # pipelined: CPU stage k runs during GPU stage k+1
     assert iv["margins"][0] >= max(v[1] for v in cpu)
     log = (tmp_path / "chain.log").read_text()
+    # pipelined: CPU stage k is launched while GPU stage k+1 runs. Checked in the driver's own log order,
+    # not the stubs' timestamps (a stub's interpreter start can lag its launch by > 1 s on a loaded node).
+    lines = log.splitlines()
+    pos = lambda s: next(i for i, line in enumerate(lines) if s in line)  # noqa: E731
+    assert pos("s0/eval: start") < pos("s1/gen: done in")
     assert "s2/eval: done in" in log and "margins: done in" in log
 
 
@@ -317,14 +322,17 @@ def _sleeps(tag):
 
 @pytest.mark.parametrize("sig,mode", [("SIGTERM", "both"), ("SIGINT", "both"), ("SIGHUP", "both"), ("SIGTERM", "cpu_only"), ("SIGINT", "cpu_only")])
 def test_signal_to_driver_leaves_no_stage_processes(tmp_path, sig, mode):
-    tag = f"9{os.getpid() % 1000:03d}{signal.Signals[sig].value:02d}{int(mode == 'cpu_only')}"
+    # unique per test run (concurrent pytest runs must not see each other's sleeps; pid % 1000 could collide)
+    tag = f"9{secrets.randbelow(10**6):06d}{signal.Signals[sig].value:02d}{int(mode == 'cpu_only')}"
     p = subprocess.Popen([sys.executable, "-c", SIGNAL_DRIVER, str(REPO_ROOT / "scripts/run_g0_eval.py"), str(tmp_path), tag, mode], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     n = 1 if mode == "cpu_only" else 3
     try:
-        deadline = time.time() + 60
-        while len(_sleeps(tag)) < n and time.time() < deadline:
+        deadline = time.time() + 180  # generous: the driver imports contam / numpy, slow on a loaded node
+        while len(_sleeps(tag)) < n and time.time() < deadline and p.poll() is None:
             time.sleep(0.1)
-        assert len(_sleeps(tag)) == n, "stages did not start"
+        if len(_sleeps(tag)) != n:
+            p.kill()
+            pytest.fail(f"stages did not start: {len(_sleeps(tag))}/{n} stage processes, driver exit {p.poll()}; output:\n{p.communicate(timeout=10)[0]}")
         os.kill(p.pid, getattr(signal, sig))  # the driver only, not its process group
         out, _ = p.communicate(timeout=60)
         assert p.returncode == 130 and "interrupted" in out, out
