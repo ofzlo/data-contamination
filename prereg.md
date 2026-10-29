@@ -100,6 +100,36 @@ proposal (`docs/CSE576_Project.pdf`): eq. 1 generation, eq. 2 group score, eq. 3
 - **Nested breadth sets (C2).** 50% ⊃ 12.5% ⊃ 3.125%, with 2,250 ⊃ 563 ⊃ 141 images. They are nested
   because each is a prefix of the same permutation. Seen metrics for C2 use the shared 3.125% set.
   The unseen group is the complement of the 50% set in every arm.
+- **The N_exp = 1,000 exposure set (D2).** Every contamination run of every condition trains on the
+  same 1,000 images (`exposure.n_exp`; `contam.data.exposure.exposure_ids`): the per-stratum prefix
+  of the split's exposure permutation, with per-stratum counts from largest-remainder rounding of
+  1,000 / 4,500 of each stratum (93 / 593 / 314 in / near / out). Because the counts grow with N in
+  every stratum and the sets are prefixes of one permutation, they nest: 141 ⊂ 563 ⊂ 1,000 ⊂ 2,250.
+  The rebuilt order reproduces the stored 2,250 / 563 / 141 sets, which `exposure_ids` checks.
+  Split A's set has ids sha256 `fccfe788952a…` (`content_hash` of the sorted ids, as the G1 run specs'
+  `exposure_ids_sha256`), split B's `6ac321ac9635…`.
+- **Seen definition (team decision, 2026-10-28).** With N_exp = 1,000 the **seen** group of every
+  analysis is the exposure set, the 1,000 images contamination runs actually train on, not the
+  split's 50% seen set (2,250). Groups per split:
+  - `seen`: the exposure set (1,000).
+  - `unseen`: the complement of the 50% set (2,250), unchanged.
+  - `seen_unexposed`: the 50% set minus the exposure set (1,250). Reported next to seen and unseen
+    everywhere (group means, by domain, S / V changes, Δ with seen_unexposed in place of seen, G1 /
+    G2 effects, margins per seed); never part of a gate decision.
+  This applies to every group statistic: summaries, Δ / Γ, bootstrap index vectors, G0 margins
+  (δ_A is 2 × SD of the d=0 seeds' exposure-set − unseen gap; δ_S, unseen only, is unchanged), G1,
+  and G2 including τ and the two-level bootstrap. The seen set is a recorded per-analysis parameter
+  (`seen_definition: {kind: exposure, n_exp, ids_sha256}`, default `exposure.n_exp`, `--n-exp` on
+  the eval CLIs), so C2's breadth arms can use n_exp = 563 / 141. Every metrics / margins / gate JSON
+  records it; the gates and `compute_margins.py` refuse inputs that record another one or none
+  (JSONs from before this decision), and `run_g0_eval.py` treats those as stale and recomputes them
+  from the stored per-image scores (`evaluate_checkpoint.py --reuse-scores`: no SPICE run, no GPU).
+  Implemented in `contam.eval.evaluate` (`load_seen_definition`, `analysis_ids`, `check_seen`).
+- **B1 overlap and the exposure set.** The B1 analysis exclusion applies on top of the seen
+  definition. Of split A's 9 seen-half B1 overlap images, 4 are in its exposure set; of split B's 8,
+  also 4. They are trained on (the exposure set is not changed) but left out of the analysis, so the
+  analysed groups are, in split A, 996 seen / 1,245 seen_unexposed / 2,239 unseen, and in split B
+  996 / 1,246 / 2,238.
 - **References.** Every image, seen or unseen, gets a `train_ref_idx`. Seen images train on that
   reference. On all images, the other 9 are held out. So the reference configuration is the same
   in both groups:

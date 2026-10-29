@@ -11,7 +11,7 @@ from contam.config import REPO_ROOT, file_sha256, load_config, read_json, write_
 from contam.data.splits import group_ids, make_split
 from contam.eval.evaluate import compare, evaluate_checkpoint, load_analysis_exclusion
 from contam.eval.gates import g1_report, g2_report, validate_g2_inputs, validate_inputs
-from tests.conftest import base_metrics, locked_split, make_annotations
+from tests.conftest import base_metrics, locked_split, make_annotations, seen_rec
 from tests.test_g2 import make_g2
 
 PATHS = [f"/tmp/b{s}.json" for s in range(5)]
@@ -49,7 +49,7 @@ def test_group_means_and_delta_leave_out_exactly_the_excluded_ids():
     assert c["n_seen"] == len(seen) - 2 and c["n_unseen"] == len(unseen) - 1
     assert c["S"]["word_count"]["unseen"]["estimate"] == pytest.approx(np.mean(kept_unseen))  # (10 + i) - 10
     assert c["A"]["cider_heldout"]["estimate"] == pytest.approx(5.0 - 2.0)
-    assert c["analysis_exclusion"]["n_excluded"] == {"seen": 2, "unseen": 1, "shared_seen": len(out & set(group_ids(split, "shared_seen"))), "all": 3}
+    assert c["analysis_exclusion"]["n_excluded"] == {"seen": 2, "unseen": 1, "seen_unexposed": 0, "shared_seen": len(out & set(group_ids(split, "shared_seen"))), "all": 3}
     assert c["gate_valid"] is True and c["robustness"] is False
 
     # robustness view: same inputs, every image kept, not gate-valid
@@ -153,8 +153,8 @@ def test_margins_and_gate_report_cli(tmp_path, g1_setup):
     ex = load_analysis_exclusion(load_config(cfg_path))
     d0 = [str(tmp_path / f"d0_s{s}.json") for s in range(5)]
     for p, m in zip(d0, baseline):
-        write_json(dict(m, manifest_split_sha256=split_sha, analysis_exclusion=ex), p)
-    write_json(base_metrics(baseline[0], manifest_split_sha256=split_sha, analysis_exclusion=ex), tmp_path / "base.json")
+        write_json(dict(m, manifest_split_sha256=split_sha, analysis_exclusion=ex, seen_definition=seen_rec(split)), p)
+    write_json(base_metrics(baseline[0], manifest_split_sha256=split_sha, analysis_exclusion=ex, seen_definition=seen_rec(split)), tmp_path / "base.json")
     common = ["--config", str(cfg_path), "--lock", str(lock)]
     margins_cmd = [sys.executable, str(REPO_ROOT / "scripts/compute_margins.py"), *common, "--d0", *d0, "--base", str(tmp_path / "base.json"), "--out"]
 
@@ -178,7 +178,7 @@ def test_margins_and_gate_report_cli(tmp_path, g1_setup):
     cks = []
     for s in range(2):
         p = tmp_path / f"p{s}.json"
-        write_json(dict(ckpt(f"p{s}", 2.0), manifest_split_sha256=split_sha, analysis_exclusion=ex), p)
+        write_json(dict(ckpt(f"p{s}", 2.0), manifest_split_sha256=split_sha, analysis_exclusion=ex, seen_definition=seen_rec(split)), p)
         cks.append({"condition": "Paired", "d": 4, "seed": s, "metrics": str(p)})
 
     def gate(margins, *extra):
@@ -216,8 +216,8 @@ def test_compute_margins_refuses_a_base_from_another_prompt(tmp_path, g1_setup):
     ex = load_analysis_exclusion(load_config(cfg_path))
     d0 = [str(tmp_path / f"d0_s{s}.json") for s in range(5)]
     for p, m in zip(d0, baseline):
-        write_json(dict(m, manifest_split_sha256=split_sha, analysis_exclusion=ex), p)
-    base = base_metrics(baseline[0], manifest_split_sha256=split_sha, analysis_exclusion=ex)
+        write_json(dict(m, manifest_split_sha256=split_sha, analysis_exclusion=ex, seen_definition=seen_rec(split)), p)
+    base = base_metrics(baseline[0], manifest_split_sha256=split_sha, analysis_exclusion=ex, seen_definition=seen_rec(split))
     cmd = [sys.executable, str(REPO_ROOT / "scripts/compute_margins.py"), "--config", str(cfg_path), "--lock", str(lock), "--d0", *d0, "--base", str(tmp_path / "base.json"),
            "--out", str(tmp_path / "m.json")]
     write_json(base, tmp_path / "base.json")
@@ -250,7 +250,7 @@ def test_margins_without_a_base_are_not_gate_valid(tmp_path, g1_setup):
     ex = load_analysis_exclusion(load_config(cfg_path))
     d0 = [str(tmp_path / f"d0_s{s}.json") for s in range(5)]
     for p, m in zip(d0, baseline):
-        write_json(dict(m, manifest_split_sha256=split_sha, analysis_exclusion=ex), p)
+        write_json(dict(m, manifest_split_sha256=split_sha, analysis_exclusion=ex, seen_definition=seen_rec(split)), p)
     r = subprocess.run([sys.executable, str(REPO_ROOT / "scripts/compute_margins.py"), "--config", str(cfg_path), "--lock", str(lock), "--d0", *d0,
                         "--out", str(tmp_path / "m.json")], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
@@ -278,7 +278,7 @@ def test_compute_margins_refuses_an_empty_group(tmp_path, g1_setup):
     ex = load_analysis_exclusion(load_config(cfg_path))
     d0 = [str(tmp_path / f"d0_s{s}.json") for s in range(5)]
     for p, m in zip(d0, baseline):
-        write_json(dict(m, manifest_split_sha256=split_sha, analysis_exclusion=ex), p)
+        write_json(dict(m, manifest_split_sha256=split_sha, analysis_exclusion=ex, seen_definition=seen_rec(split)), p)
     r = subprocess.run([sys.executable, str(REPO_ROOT / "scripts/compute_margins.py"), "--config", str(cfg_path), "--lock", str(lock), "--d0", *d0,
                         "--out", str(tmp_path / "m.json")], capture_output=True, text=True)
     assert r.returncode != 0 and "no unseen images left to average" in r.stderr and "Traceback" not in r.stderr

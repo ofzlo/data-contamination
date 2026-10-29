@@ -33,7 +33,8 @@ G2 (``g2_report``; τ procedure in contam.eval.stats):
 
 Both gates leave out the B1 analysis exclusion (``exclusion``; contam.eval.evaluate) and require
 every input to record the same one; with it not applied they give the robustness view, which is
-not gate-valid.
+not gate-valid. Their seen group is the exposure set (``seen``; contam.eval.evaluate.load_seen_definition),
+and every input must record the same seen definition; the seen_unexposed group is reported only.
 """
 
 from __future__ import annotations
@@ -47,7 +48,19 @@ import numpy as np
 
 from contam.eval import stats
 from contam.eval.association import aligned
-from contam.eval.evaluate import analysis_ids, check_comparable, check_exclusion, compare, exclusion_record, is_valid, mark_validity, per_image_field, warn_partial
+from contam.eval.evaluate import (
+    analysis_ids,
+    check_comparable,
+    check_exclusion,
+    check_seen,
+    compare,
+    exclusion_record,
+    is_valid,
+    mark_validity,
+    per_image_field,
+    seen_record,
+    warn_partial,
+)
 from contam.eval.stats import memory_margin
 
 N_BASELINE_SEEDS = 5
@@ -80,6 +93,7 @@ def validate_inputs(
     allow_partial: bool = False,
     split_sha: str | None = None,
     exclusion: dict | None = None,
+    seen: dict | None = None,
 ) -> None:
     """Refuse gate inputs that would silently corrupt a verdict.
 
@@ -94,7 +108,9 @@ def validate_inputs(
     * margins, baseline and checkpoint metrics must carry one recorded manifest_split_sha256 (the split's
       manifest lock entry when they were evaluated), equal to ``split_sha`` (the current entry) if given;
     * margins, baseline and checkpoint metrics must record the B1 exclusion ``exclusion``, and the
-      margins must have applied it as this run does (``check_exclusion``; never relaxed).
+      margins must have applied it as this run does (``check_exclusion``; never relaxed);
+    * margins, baseline and checkpoint metrics must record the seen definition ``seen`` (``check_seen``;
+      never relaxed).
     The gate-validity, manifest-lock, file-identity and seed-count rules are relaxed only with ``allow_partial``
     (the report is then not gate-valid). Split / completeness / image-set agreement of every
     metrics file is checked by ``compare``.
@@ -103,6 +119,7 @@ def validate_inputs(
         raise ValueError(f"margins were computed on split {margins['split']['name']}, not {split['name']}")
     check_exclusion([("margins", margins)], exclusion, aggregates=True)
     check_exclusion([(f"metrics {m.get('checkpoint_id')!r}", m) for m in [*baseline, *cell_metrics]], exclusion)
+    check_seen([("margins", margins), *((f"metrics {m.get('checkpoint_id')!r}", m) for m in [*baseline, *cell_metrics])], seen)
     if not allow_partial:
         if not is_valid(margins, exclusion):
             raise ValueError("margins are not gate-valid (computed with --allow-partial?)")
@@ -135,17 +152,19 @@ def validate_inputs(
 
 
 def g1_report(
-    split: dict, margins: dict, baseline: Sequence[dict], checkpoints: Sequence[dict], cell_metrics: Sequence[dict], cfg: dict, allow_partial: bool = False, exclusion: dict | None = None
+    split: dict, margins: dict, baseline: Sequence[dict], checkpoints: Sequence[dict], cell_metrics: Sequence[dict], cfg: dict, allow_partial: bool = False, exclusion: dict | None = None,
+    seen: dict | None = None,
 ) -> dict:
     """Compute the G1 report dict (inputs validated by the caller with ``validate_inputs``)."""
     st, gcfg, mcfg = cfg["stats"], cfg["gates"], cfg["margins"]
     if allow_partial:
         warn_partial("gate_report")
-    kw = dict(n_boot=st["n_boot"], seed=st["boot_seed"], ci=st["ci"], allow_partial=allow_partial, exclusion=exclusion)
+    kw = dict(n_boot=st["n_boot"], seed=st["boot_seed"], ci=st["ci"], allow_partial=allow_partial, exclusion=exclusion, seen=seen)
     cells = defaultdict(list)
     for c, m in zip(checkpoints, cell_metrics):
         cells[(c["condition"], int(c["d"]))].append(m)
-    report = {"split": split["name"], "split_hash": split["content_hash"], "analysis_exclusion": exclusion_record(exclusion, split, map(int, baseline[0]["per_image"])), "cells": {}, "criteria": {}}
+    report = {"split": split["name"], "split_hash": split["content_hash"], "analysis_exclusion": exclusion_record(exclusion, split, map(int, baseline[0]["per_image"]), seen),
+              "seen_definition": seen_record(seen), "cells": {}, "criteria": {}}
     mark_validity(report, not allow_partial, exclusion)
     for key in sorted(cells):
         ms = cells[key]
@@ -161,9 +180,13 @@ def g1_report(
         em = V["exact_match_train"]["seen"]
         a["exact_match_change_seen"] = em
         a["exact_match_ok"] = em["ci_lo"] > 0
+        if "seen_unexposed" in V["exact_match_train"]:  # reported only
+            a["exact_match_change_seen_unexposed"] = V["exact_match_train"]["seen_unexposed"]
         if "rmi_sum" in V:
             a["delta_rmi_seen"] = {f: V[f]["seen"] for f in ("rmi_sum", "rmi_norm")}
             a["delta_rmi_unseen_control"] = {f: V[f]["unseen"] for f in ("rmi_sum", "rmi_norm")}
+            if "seen_unexposed" in V["rmi_sum"]:  # reported only
+                a["delta_rmi_seen_unexposed"] = {f: V[f]["seen_unexposed"] for f in ("rmi_sum", "rmi_norm")}
             a["delta_rmi_ok"] = V["rmi_sum"]["seen"]["ci_lo"] > 0
             a["delta_V"] = {f: memory_margin(V[f]["seen"]["estimate"], mcfg["delta_v_floor"][f], mcfg["delta_v_rel"]) for f in ("rmi_sum", "rmi_norm")}
             a["verdict"] = "PASS" if (a["delta_rmi_ok"] and a["exact_match_ok"]) else "FAIL"
@@ -238,6 +261,7 @@ def validate_g2_inputs(
     allow_partial: bool = False,
     split_sha: str | None = None,
     exclusion: dict | None = None,
+    seen: dict | None = None,
 ) -> None:
     """G1's ``validate_inputs`` (with ``gates.g2_seeds_per_cell``) plus the G2 grid and the G1 report.
 
@@ -246,7 +270,7 @@ def validate_g2_inputs(
       every cell are 0 .. g2_seeds_per_cell − 1;
     * a metrics file whose checkpoint_id names a cell (``parse_run_id``) is used for that cell only;
     * the G1 report (source of δ_V) was made on this split, is gate-valid, under the inputs' split
-      sha and B1 exclusion (applied the same way), from the same baseline and margins files, and its
+      sha, B1 exclusion (applied the same way) and seen definition, from the same baseline and margins files, and its
       criterion (a) passed;
     * every metrics file has the τ fields (the memory field needs teacher-forced log-probs).
     The grid, seed-slot and G1-validity rules are relaxed with ``allow_partial`` (not gate-valid).
@@ -257,8 +281,9 @@ def validate_g2_inputs(
         named = parse_run_id(m.get("checkpoint_id"))
         if named is not None and named != (c["condition"], int(c["d"]), int(c["seed"])):
             raise ValueError(f"{c['metrics']}: checkpoint_id {m['checkpoint_id']!r} is {named}, but it is given as {(c['condition'], int(c['d']), int(c['seed']))}")
-    validate_inputs(split, margins, baseline_paths, baseline, checkpoints, cell_metrics, n, allow_partial, split_sha, exclusion)
+    validate_inputs(split, margins, baseline_paths, baseline, checkpoints, cell_metrics, n, allow_partial, split_sha, exclusion, seen)
     check_exclusion([("the G1 report", g1)], exclusion, aggregates=True)
+    check_seen([("the G1 report", g1)], seen)
     allowed = set(gcfg["g2_doses"]) | set(gcfg["g2_optional_doses"])
     grid, slots = defaultdict(set), defaultdict(set)
     for c in checkpoints:
@@ -312,19 +337,20 @@ def validate_g2_inputs(
 
 def g2_report(
     split: dict, margins: dict, g1: dict, baseline: Sequence[dict], checkpoints: Sequence[dict], cell_metrics: Sequence[dict], cfg: dict, allow_partial: bool = False,
-    exclusion: dict | None = None,
+    exclusion: dict | None = None, seen: dict | None = None,
 ) -> dict:
-    """Compute the G2 report dict (inputs validated by the caller with ``validate_g2_inputs``)."""
+    """Compute the G2 report dict (inputs validated by the caller with ``validate_g2_inputs``). Every
+    seen-group quantity (τ_memory, the equivalence test and its two-level bootstrap) uses ``seen``."""
     st, gcfg = cfg["stats"], cfg["gates"]
     if allow_partial:
         warn_partial("g2_report")
-    check_comparable(list(baseline) + list(cell_metrics), split, allow_partial, exclusion)
+    check_comparable(list(baseline) + list(cell_metrics), split, allow_partial, exclusion, seen)
     kw = dict(n_boot=st["n_boot"], seed=st["boot_seed"], ci=st["ci"])
     sf, mf = gcfg["tau_style_metric"], gcfg["tau_memory_metric"]
     direction = cfg["style"]["primary_metrics"][sf]
     delta_s, delta_v = float(margins["delta_S"][sf]), float(g1["criteria"]["a"]["delta_V"][mf])
     avail = [int(k) for k in baseline[0]["per_image"]]
-    seen, unseen = (analysis_ids(split, g, avail, exclusion) for g in ("seen", "unseen"))
+    seen_ids, unseen, unexp = (analysis_ids(split, g, avail, exclusion, seen) for g in ("seen", "unseen", "seen_unexposed"))
     cells = defaultdict(list)
     for c, m in zip(checkpoints, cell_metrics):
         cells[(c["condition"], int(c["d"]))].append(m)
@@ -332,9 +358,9 @@ def g2_report(
     def arr(ms, field, ids):
         return aligned(per_image_field(ms, field), ids)
 
-    base_s, base_m = arr(baseline, sf, unseen), arr(baseline, mf, seen)
+    base_s, base_m = arr(baseline, sf, unseen), arr(baseline, mf, seen_ids)
     report = {
-        "split": split["name"], "split_hash": split["content_hash"], "analysis_exclusion": exclusion_record(exclusion, split, avail),
+        "split": split["name"], "split_hash": split["content_hash"], "analysis_exclusion": exclusion_record(exclusion, split, avail, seen), "seen_definition": seen_record(seen),
         "style_metric": sf, "memory_metric": mf, "delta_S": delta_s, "delta_V": delta_v,
         "tau_condition": gcfg["g2_tau_condition"], "conditions": {}, "samedist": {}, "criteria": {},
     }
@@ -343,7 +369,7 @@ def g2_report(
         if not doses:
             continue
         data = {"unseen": {"b": base_s, **{f"d{d}": arr(cells[(cond, d)], sf, unseen) for d in doses}},
-                "seen": {"b": base_m, **{f"d{d}": arr(cells[(cond, d)], mf, seen) for d in doses}}}
+                "seen": {"b": base_m, **{f"d{d}": arr(cells[(cond, d)], mf, seen_ids) for d in doses}}}
 
         def style_fn(D, doses=doses):
             return np.array([direction * np.mean(D["unseen"][f"d{d}"] - D["unseen"]["b"]) for d in doses])
@@ -357,9 +383,11 @@ def g2_report(
         if cond == "SameDist":
             report["samedist"][f"d{d}"] = {
                 "style_unseen": directional(stats.bootstrap_paired_diff(arr(ms, sf, unseen), base_s, **kw).to_dict(), direction),
-                "memory_seen": stats.bootstrap_paired_diff(arr(ms, mf, seen), base_m, **kw).to_dict(),
+                "memory_seen": stats.bootstrap_paired_diff(arr(ms, mf, seen_ids), base_m, **kw).to_dict(),
                 "n_seeds": len(ms),
             }
+            if unexp:  # reported only
+                report["samedist"][f"d{d}"]["memory_seen_unexposed"] = stats.bootstrap_paired_diff(arr(ms, mf, unexp), arr(baseline, mf, unexp), **kw).to_dict()
 
     tc = report["conditions"][gcfg["g2_tau_condition"]]
     t_style, t_mem = float(tc["style"]["tau"]), float(tc["memory"]["tau"])  # "inf" -> inf
@@ -379,9 +407,9 @@ def g2_report(
     else:
         d = int(t_style)
         cell = cells[(gcfg["g2_tau_condition"], d)]
-        boot = stats.bootstrap_paired_diff(arr(cell, mf, seen), base_m, **kw)
-        per_seed = [float(np.mean(arr([m], mf, seen) - base_m)) for m in cell]
-        two = stats.bootstrap_two_level([arr([m], mf, seen) for m in cell], [arr([m], mf, seen) for m in baseline], **kw)
+        boot = stats.bootstrap_paired_diff(arr(cell, mf, seen_ids), base_m, **kw)
+        per_seed = [float(np.mean(arr([m], mf, seen_ids) - base_m)) for m in cell]
+        two = stats.bootstrap_two_level([arr([m], mf, seen_ids) for m in cell], [arr([m], mf, seen_ids) for m in baseline], **kw)
         t_int = stats.seed_t_interval(per_seed, st["ci"])
         pooled_ok = stats.equivalence_below(boot, delta_v)
         rules = {
@@ -391,6 +419,8 @@ def g2_report(
             "seed_t": {**t_int, "pass": t_int["ci_hi"] < delta_v},
         }
         prim.update(d_style=d, v_effect=boot.to_dict(), per_seed_estimates=per_seed, rules=rules, verdict="PASS" if rules[rule]["pass"] else "FAIL")
+        if unexp:  # reported only, never part of the verdict
+            prim["v_effect_seen_unexposed"] = stats.bootstrap_paired_diff(arr(cell, mf, unexp), arr(baseline, mf, unexp), **kw).to_dict()
     diff = tc["log2_tau_diff"]
     sec = {"rule": "CI of log2 tau*_memory - log2 tau*_style above 0", **diff, "verdict": "PASS" if diff["ci_above_zero"] else "FAIL"}
     report["criteria"] = {"primary": prim, "secondary": sec}
@@ -415,7 +445,9 @@ def _f(x) -> str:
 
 def g2_text(report: dict) -> str:
     """Readable G2 report."""
-    L = [f"G2 report (split {report['split']}){'' if report['gate_valid'] else '  [NOT GATE-VALID]'}{'  [ROBUSTNESS: B1 overlap included]' if report.get('robustness') else ''}",
+    sd = report.get("seen_definition")
+    L = [f"G2 report (split {report['split']}){'' if report['gate_valid'] else '  [NOT GATE-VALID]'}{'  [ROBUSTNESS: B1 overlap included]' if report.get('robustness') else ''}"
+         + (f"; seen = exposure set N_exp={sd['n_exp']}" if sd else ""),
          f"delta_S[{report['style_metric']}] = {report['delta_S']:.4f}   delta_V[{report['memory_metric']}] = {report['delta_V']:.4f}"]
     for cond, c in report["conditions"].items():
         role = "verdict" if cond == report["tau_condition"] else "reported only"
@@ -439,6 +471,9 @@ def g2_text(report: dict) -> str:
         v = p["v_effect"]
         L.append(f"          V effect at d={p['d_style']}: {v['estimate']:.4f} [{v['ci_lo']:.4f}, {v['ci_hi']:.4f}] vs delta_V {p['delta_V']:.4f}; "
                  f"per seed: {', '.join(f'{x:.4f}' for x in p['per_seed_estimates'])}")
+        if "v_effect_seen_unexposed" in p:
+            u = p["v_effect_seen_unexposed"]
+            L.append(f"          seen_unexposed (reported only): {u['estimate']:.4f} [{u['ci_lo']:.4f}, {u['ci_hi']:.4f}]")
         for name, r in p["rules"].items():
             bound = f" upper {r['ci_hi']:.4f}" if "ci_hi" in r else ""
             L.append(f"          {'*' if name == p['equivalence_rule'] else ' '} {name:22s}{bound:>16s}  {'pass' if r['pass'] else 'no'}")

@@ -13,7 +13,7 @@ from contam.config import REPO_ROOT, load_config, read_json, write_json
 from contam.data.splits import make_split
 from contam.eval import stats
 from contam.eval.gates import g2_report, g2_text, parse_run_id, validate_g2_inputs
-from tests.conftest import excl_record, locked_split, make_annotations
+from tests.conftest import excl_record, locked_split, make_annotations, seen_rec
 
 DELTA_S, DELTA_V = 1.0, 0.5
 PROV = {"generations": {"prompt_sha": "P", "model": "m", "batch_size": 16, "max_new_tokens": 300}}
@@ -205,9 +205,9 @@ def test_g2_report_cli_end_to_end(tmp_path):
     bp = []
     for m in base:
         bp.append(str(tmp_path / f"{m['checkpoint_id']}.json"))
-        write_json(dict(m, manifest_split_sha256=split_sha, analysis_exclusion=excl_record()), bp[-1])
-    write_json(dict(margins, d0_files=bp, manifest_split_sha256=split_sha, analysis_exclusion=excl_record()), tmp_path / "margins.json")
-    write_json(dict(g1, manifest_split_sha256=split_sha, baseline_files=bp, margins_file=str(tmp_path / "margins.json"), analysis_exclusion=excl_record()), tmp_path / "g1.json")
+        write_json(dict(m, manifest_split_sha256=split_sha, analysis_exclusion=excl_record(), seen_definition=seen_rec(split)), bp[-1])
+    write_json(dict(margins, d0_files=bp, manifest_split_sha256=split_sha, analysis_exclusion=excl_record(), seen_definition=seen_rec(split)), tmp_path / "margins.json")
+    write_json(dict(g1, manifest_split_sha256=split_sha, baseline_files=bp, margins_file=str(tmp_path / "margins.json"), analysis_exclusion=excl_record(), seen_definition=seen_rec(split)), tmp_path / "g1.json")
     named, samedist = [], []
     for c, m in zip(cks, cms):
         p = str(tmp_path / f"{m['checkpoint_id']}.json")
@@ -216,7 +216,7 @@ def test_g2_report_cli_end_to_end(tmp_path):
             samedist.append(p)
         else:
             named.append(p)
-        write_json(dict(m, manifest_split_sha256=split_sha, analysis_exclusion=excl_record()), p)
+        write_json(dict(m, manifest_split_sha256=split_sha, analysis_exclusion=excl_record(), seen_definition=seen_rec(split)), p)
     cmd = [sys.executable, str(REPO_ROOT / "scripts/g2_report.py"), "--config", str(cfg_path), "--lock", str(lock), "--split", str(split_path),
            "--margins", str(tmp_path / "margins.json"), "--g1-report", str(tmp_path / "g1.json"), "--baseline", *bp, "--checkpoints", *named,
            "--cell", "SameDist:16=" + ",".join(samedist), "--out", str(tmp_path / "g2.json")]
@@ -266,11 +266,11 @@ def test_g1_report_paths_are_realpaths_for_g2(tmp_path):
         for row in m["per_image"].values():
             row["rmi_norm"] = row["rmi_sum"] / 10
             row["exact_match_train"] = 1.0 if m["checkpoint_id"].startswith("paired_d64") else 0.0
-        write_json(dict(m, manifest_split_sha256=split_sha, analysis_exclusion=excl_record(), **over), mdir / name)
+        write_json(dict(m, manifest_split_sha256=split_sha, analysis_exclusion=excl_record(), seen_definition=seen_rec(split), **over), mdir / name)
         return str(mdir / name)
 
     bp = [put(m, f"{m['checkpoint_id']}.json") for m in base]
-    write_json(dict(margins, d0_files=bp, manifest_split_sha256=split_sha, analysis_exclusion=excl_record()), mdir / "margins.json")
+    write_json(dict(margins, d0_files=bp, manifest_split_sha256=split_sha, analysis_exclusion=excl_record(), seen_definition=seen_rec(split)), mdir / "margins.json")
     paths = {m["checkpoint_id"]: put(m, f"{m['checkpoint_id']}.json") for m in cms}
     g1_cells = [c for c in cks if c["condition"] == "Paired" and c["d"] in (4, 64) and c["seed"] < 2]
     man = {"split": "../splits/" + split_path.name, "margins": "../m/margins.json", "baseline": [f"../m/{Path(p).name}" for p in bp],

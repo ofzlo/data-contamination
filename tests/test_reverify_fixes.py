@@ -11,7 +11,7 @@ from contam.config import REPO_ROOT, load_config, write_json
 from contam.data.splits import annotations_hash, make_split
 from contam.eval.evaluate import evaluate_checkpoint, load_analysis_exclusion
 from contam.eval.gates import g1_report, validate_inputs
-from tests.conftest import locked_split, make_annotations
+from tests.conftest import locked_split, make_annotations, seen_def
 from tests.test_review_fixes import FakeVLM, _tiny_dataset
 
 PATHS = [f"/tmp/b{s}.json" for s in range(5)]
@@ -44,10 +44,10 @@ def test_compute_margins_records_realpaths(tmp_path):
     cfg_path, lock, _, split_sha = locked_split(tmp_path, split)
     for s in range(5):
         m = evaluate_checkpoint({a["image_id"]: a["refs"][s] for a in ann}, ann, split, metrics=["cider"], tokenizer="simple", checkpoint_id=f"d0_s{s}",
-                                exclusion=load_analysis_exclusion(load_config(cfg_path)))
+                                exclusion=load_analysis_exclusion(load_config(cfg_path)), seen=seen_def(split))
         write_json(dict(m, manifest_split_sha256=split_sha), tmp_path / f"d0_s{s}.json")
     base = evaluate_checkpoint({a["image_id"]: a["refs"][9] for a in ann}, ann, split, metrics=["cider"], tokenizer="simple", checkpoint_id="base",
-                               exclusion=load_analysis_exclusion(load_config(cfg_path)))
+                               exclusion=load_analysis_exclusion(load_config(cfg_path)), seen=seen_def(split))
     write_json(dict(base, manifest_split_sha256=split_sha), tmp_path / "base.json")
     cmd = [sys.executable, str(REPO_ROOT / "scripts/compute_margins.py"), "--config", str(cfg_path), "--lock", str(lock), "--out", "m.json", "--base", "base.json",
            "--d0"] + [f"d0_s{s}.json" for s in range(5)]

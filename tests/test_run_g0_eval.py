@@ -14,7 +14,7 @@ import yaml
 from contam.config import REPO_ROOT, file_sha256, load_config, load_prompts, prompt_sha, write_json
 from contam.data.splits import make_split
 from contam.eval.evaluate import load_analysis_exclusion
-from tests.conftest import excl_record, locked_split, make_annotations
+from tests.conftest import excl_record, locked_split, make_annotations, seen_rec
 
 _spec = importlib.util.spec_from_file_location("run_g0_eval", REPO_ROOT / "scripts" / "run_g0_eval.py")
 g0 = importlib.util.module_from_spec(_spec)
@@ -124,7 +124,7 @@ def _base(cfg, split, split_sha, **over):
     """Untrained-base metrics generated with the current caption prompt and model, evaluated completely on
     ``split`` under its lock entry ``split_sha`` and the current B1 exclusion."""
     return {"summary": {}, "complete": True, "split": {"name": split["name"], "content_hash": split["content_hash"]}, "manifest_split_sha256": split_sha,
-            "analysis_exclusion": load_analysis_exclusion(cfg),
+            "analysis_exclusion": load_analysis_exclusion(cfg), "seen_definition": seen_rec(split),
             "provenance": {"generations": {"model": cfg["models"]["main"], "prompt_sha": prompt_sha(load_prompts()["caption"]), "adapter": None, **over}}}
 
 
@@ -181,7 +181,7 @@ def test_main_warns_without_base_and_base_makes_margins_stale(tmp_path, capsys):
         write_json({}, m)
     margins = tmp_path / "outputs" / "g0" / "margins_A.json"
     time.sleep(0.01)
-    no_base = {"gate_valid": False, "manifest_split_sha256": split_sha, "analysis_exclusion": excl_record(), "base_check": "missing"}
+    no_base = {"gate_valid": False, "manifest_split_sha256": split_sha, "analysis_exclusion": excl_record(), "seen_definition": seen_rec(split), "base_check": "missing"}
     write_json(no_base, margins)  # margins without a base are never final: re-run every time, but accepted as written
     assert not final[0].done() and final[0].check()
     write_json(dict(no_base, gate_valid=True), margins)  # an old margins file valid without the base check
@@ -194,7 +194,7 @@ def test_main_warns_without_base_and_base_makes_margins_stale(tmp_path, capsys):
     assert not final[0].done() and "--base" not in final[0].cmd
     out = capsys.readouterr().out
     assert "not generated with the current p_cap" in out and "regenerate and re-evaluate the base" in out and "G0 incomplete" in out
-    for stale in (dict(analysis_exclusion=None), dict(complete=False), dict(manifest_split_sha256="old"), dict(split={"name": "A", "content_hash": "other"})):
+    for stale in (dict(analysis_exclusion=None), dict(seen_definition=None), dict(complete=False), dict(manifest_split_sha256="old"), dict(split={"name": "A", "content_hash": "other"})):
         write_json(dict(_base(cfg, split, split_sha), **stale), args.base)  # generations current, evaluation stale: re-evaluate only
         _, final = g0.plan(chain, args, cfg, split, split_sha)
         assert not final[0].done() and "--base" not in final[0].cmd, stale
@@ -205,7 +205,7 @@ def test_main_warns_without_base_and_base_makes_margins_stale(tmp_path, capsys):
     _, final = g0.plan(chain, args, cfg, split, split_sha)
     assert not final[0].done() and "--base" in final[0].cmd and final[0].check is None
     assert "G0 incomplete" not in capsys.readouterr().out
-    with_base = {"gate_valid": True, "manifest_split_sha256": split_sha, "analysis_exclusion": excl_record(), "base_check": "present", "base_cider_check": {}, "base_file": str(args.base.resolve())}
+    with_base = {"gate_valid": True, "manifest_split_sha256": split_sha, "analysis_exclusion": excl_record(), "seen_definition": seen_rec(split), "base_check": "present", "base_cider_check": {}, "base_file": str(args.base.resolve())}
     write_json(dict(with_base, base_file="/other/base.json"), margins)  # checked against another base
     assert not final[0].done()
     write_json(with_base, margins)

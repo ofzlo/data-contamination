@@ -2,7 +2,10 @@
 """G0 evaluation chain: the five d=0 checkpoints on one split, then the G0 margins. Does NOT train.
 
 Per checkpoint, a GPU stage (``contam.generate``: prompt ``caption``, T=0, every split image; then
-``scripts/score_refs.py``) and a CPU stage (``scripts/evaluate_checkpoint.py --logprobs``; SPICE-bound).
+``scripts/score_refs.py``) and a CPU stage (``scripts/evaluate_checkpoint.py --logprobs``; SPICE-bound;
+``--reuse-scores``: metrics that are stale only in their group statistics, e.g. made before the
+current seen definition or B1 exclusion, are recomputed from their stored per-image CIDEr / SPICE
+scores without a SPICE run).
 Two-stage pipeline: checkpoint k's CPU stage runs while checkpoint k+1's GPU stage runs; never two
 GPU stages or two CPU stages at once. When all five metrics exist, ``scripts/compute_margins.py``
 (with the untrained base for the CIDEr sanity check) writes the margins and the G0 report. Without
@@ -50,7 +53,7 @@ from typing import Callable, NamedTuple, Sequence
 from contam.config import REPO_ROOT, load_config, load_prompts, prompt_sha, read_json, read_jsonl
 from contam.data.freeze import DEFAULT_LOCK, check_split_frozen
 from contam.data.nocaps import load_annotations
-from contam.eval.evaluate import load_analysis_exclusion
+from contam.eval.evaluate import load_analysis_exclusion, load_seen_definition, seen_matches
 
 PROMPT_ID = "caption"
 N_G0_SEEDS = 5
@@ -247,21 +250,22 @@ def logprobs_complete(path: Path, prov: dict, n_refs: dict[int, int], ids: Seque
     return all(have.get(i) == set(range(n_refs[i])) for i in ids)
 
 
-def json_current(path: Path, inputs: Sequence[Path], split_sha: str | None, excl_sha: str, valid: bool = True) -> bool:
+def json_current(path: Path, inputs: Sequence[Path], split_sha: str | None, excl_sha: str, valid: bool = True, seen: dict | None = None) -> bool:
     """Gate-valid (``valid``; False: not gate-valid) JSON output checked against the current lock entry
-    of the split and made under the current B1 analysis exclusion (file sha256), newer than every
-    input. Outputs from before the exclusion (none recorded) are stale and recomputed."""
+    of the split and made under the current B1 analysis exclusion (file sha256) and seen definition
+    ``seen``, newer than every input. Outputs from before the exclusion or the seen definition (none
+    recorded) are stale and recomputed (metrics: from their stored per-image scores, --reuse-scores)."""
     if split_sha is None or not path.exists() or not all(p.exists() for p in inputs):
         return False
     m = read_json(path)
     return (m.get("gate_valid") is valid and m.get("manifest_split_sha256") == split_sha and (m.get("analysis_exclusion") or {}).get("sha256") == excl_sha
-            and all(path.stat().st_mtime >= p.stat().st_mtime for p in inputs))
+            and seen_matches(m, seen) and all(path.stat().st_mtime >= p.stat().st_mtime for p in inputs))
 
 
-def base_problem(path: Path, model_prov: dict, split: dict, split_sha: str | None, excl_sha: str) -> str | None:
+def base_problem(path: Path, model_prov: dict, split: dict, split_sha: str | None, excl_sha: str, seen: dict | None = None) -> str | None:
     """Why the untrained-base metrics cannot serve the G0 base check; None if they are current: generated
     with the current caption prompt and model, and evaluated completely on this split, its current lock
-    entry and the current B1 analysis exclusion."""
+    entry, the current B1 analysis exclusion and seen definition."""
     if not path.exists():
         return f"no untrained-base metrics {path}"
     m = read_json(path)
@@ -269,9 +273,9 @@ def base_problem(path: Path, model_prov: dict, split: dict, split_sha: str | Non
     if not all(gen.get(k) == v for k, v in model_prov.items()):
         return f"untrained-base metrics {path} were not generated with the current p_cap / model (regenerate and re-evaluate the base)"
     if (not m.get("complete") or m.get("split", {}).get("content_hash") != split["content_hash"] or split_sha is None
-            or m.get("manifest_split_sha256") != split_sha or (m.get("analysis_exclusion") or {}).get("sha256") != excl_sha):
-        return (f"untrained-base metrics {path} were not evaluated completely on split {split['name']} under its current lock entry and "
-                "the current B1 analysis exclusion (re-evaluate the base with scripts/evaluate_checkpoint.py; its generations are current)")
+            or m.get("manifest_split_sha256") != split_sha or (m.get("analysis_exclusion") or {}).get("sha256") != excl_sha or not seen_matches(m, seen)):
+        return (f"untrained-base metrics {path} were not evaluated completely on split {split['name']} under its current lock entry, "
+                "the current B1 analysis exclusion and seen definition (re-evaluate the base with scripts/evaluate_checkpoint.py --reuse-scores; its generations are current)")
     return None
 
 
@@ -279,10 +283,12 @@ def plan(chain: Chain, args, cfg: dict, split: dict, split_sha: str | None) -> t
     out = Path(cfg["paths"]["outputs_dir"])
     g0, lp_dir, logs = out / "g0", out / "logprobs", out / "logs" / "g0"
     ids = sorted(set(split["seen"]) | set(split["unseen"]))
-    n_refs = {int(a["image_id"]): len(a["refs"]) for a in load_annotations(cfg["paths"]["annotations"])}
+    ann = load_annotations(cfg["paths"]["annotations"])
+    n_refs = {int(a["image_id"]): len(a["refs"]) for a in ann}
     # the CLIs below use the default prompts file and the configured model
     model_prov = {"model": cfg["models"]["main"], "prompt_sha": prompt_sha(load_prompts()[PROMPT_ID])}
     excl_sha = load_analysis_exclusion(cfg)["sha256"]
+    seen = load_seen_definition(cfg, split, ann)  # exposure.n_exp; the CLIs below load the same default
     py = [sys.executable]
     common = (["--config", args.config] if args.config else []) + ["--lock", str(args.lock)]
     sp = ["--split", str(args.split)]
@@ -299,8 +305,8 @@ def plan(chain: Chain, args, cfg: dict, split: dict, split_sha: str | None) -> t
         ]
         cpu = [
             Stage(f"{run_id}/evaluate", py + [str(REPO_ROOT / "scripts/evaluate_checkpoint.py"), *common, *ck, "--generations", str(gens), "--logprobs", str(lp), *sp,
-                                              "--prompt-id", PROMPT_ID, "--out", str(met)],
-                  lambda met=met, gens=gens, lp=lp: json_current(met, [gens, lp], split_sha, excl_sha), logs / f"{run_id}_evaluate.log"),
+                                              "--prompt-id", PROMPT_ID, "--reuse-scores", "--out", str(met)],
+                  lambda met=met, gens=gens, lp=lp: json_current(met, [gens, lp], split_sha, excl_sha, seen=seen), logs / f"{run_id}_evaluate.log"),
         ]
         jobs.append((gpu, cpu))
         metrics.append(met)
@@ -309,12 +315,12 @@ def plan(chain: Chain, args, cfg: dict, split: dict, split_sha: str | None) -> t
         margins = g0 / f"margins_{split['name']}.json"
         base = Path(args.base)
         cmd = py + [str(REPO_ROOT / "scripts/compute_margins.py"), *common, *sp, "--d0", *map(str, metrics), "--out", str(margins)]
-        problem = base_problem(base, model_prov, split, split_sha, excl_sha)
+        problem = base_problem(base, model_prov, split, split_sha, excl_sha, seen)
         if problem is None:
             cmd[-2:-2] = ["--base", str(base)]
 
             def margins_done() -> bool:  # gate-valid, with the check of this base
-                if not json_current(margins, [*metrics, base], split_sha, excl_sha):
+                if not json_current(margins, [*metrics, base], split_sha, excl_sha, seen=seen):
                     return False
                 m = read_json(margins)
                 return "base_cider_check" in m and m.get("base_file") == os.path.realpath(base)
@@ -325,7 +331,7 @@ def plan(chain: Chain, args, cfg: dict, split: dict, split_sha: str | None) -> t
                       "(recomputed on every run until a current base exists)")
 
             def margins_without_base() -> bool:  # written, and carrying no (old) base check
-                if not json_current(margins, metrics, split_sha, excl_sha, valid=False):
+                if not json_current(margins, metrics, split_sha, excl_sha, valid=False, seen=seen):
                     return False
                 m = read_json(margins)
                 return m.get("base_check") == "missing" and "base_cider_check" not in m

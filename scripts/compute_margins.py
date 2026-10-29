@@ -2,7 +2,9 @@
 """G0: decision margins δ_S, δ_A from the five d=0 seeds, plus the base-model CIDEr sanity check.
 
 δ_S(metric) = 2 × SD (ddof=1) across d=0 seeds of the UNSEEN-group mean of the S metric.
-δ_A(metric) = 2 × SD (ddof=1) across d=0 seeds of the seen-minus-unseen gap of group means.
+δ_A(metric) = 2 × SD (ddof=1) across d=0 seeds of the seen-minus-unseen gap of group means, with
+seen = the exposure set (``exposure.n_exp`` / ``--n-exp``; recorded as ``seen_definition``); the
+seen_unexposed-minus-unseen gap is reported (``per_seed``), never used.
 δ_V is set at G1 from the Paired d=64 effect (scripts/gate_report.py); its floors are recorded here.
 Group means (and the base CIDEr / SPICE bands) are taken from the per-image scores without the B1
 analysis exclusion; ``--include-b1-overlap`` gives the robustness margins (not gate-valid).
@@ -25,14 +27,16 @@ import numpy as np
 
 from contam.config import load_config, read_json, write_json
 from contam.data.freeze import add_check_args, cli_check
-from contam.eval.evaluate import analysis_ids, check_exclusion, exclusion_record, load_analysis_exclusion, mark_validity, warn_partial
+from contam.data.nocaps import load_annotations
+from contam.eval.evaluate import analysis_ids, check_exclusion, check_seen, exclusion_record, load_analysis_exclusion, load_seen_definition, mark_validity, seen_record, warn_partial
 from contam.eval.gates import N_BASELINE_SEEDS
 from contam.eval.stats import association_margin, style_margin
 
 
-def group_mean(m: dict, split: dict, group: str, field: str, exclusion: dict) -> float | None:
-    """Mean of a per-image field over ``group`` without the B1 exclusion (None if not scored; exits if the group is empty)."""
-    ids = analysis_ids(split, group, map(int, m["per_image"]), exclusion)
+def group_mean(m: dict, split: dict, group: str, field: str, exclusion: dict, seen: dict | None = None) -> float | None:
+    """Mean of a per-image field over ``group`` (seen: the exposure set ``seen``) without the B1 exclusion
+    (None if not scored; exits if the group is empty)."""
+    ids = analysis_ids(split, group, map(int, m["per_image"]), exclusion, seen)
     if not ids:
         sys.exit(f"{m.get('checkpoint_id')!r}: no {group} images left to average {field} over (after the B1 exclusion)")
     if field not in m["per_image"][str(ids[0])]:
@@ -48,6 +52,8 @@ def main() -> None:
     ap.add_argument("--split", default=None, help="split JSON the d=0 metrics were computed on (default: <splits_dir>/split_<name>.json)")
     ap.add_argument("--allow-partial", action="store_true", help="smoke tests only; output is NOT gate-valid")
     ap.add_argument("--include-b1-overlap", action="store_true", help="robustness view: keep the B1 analysis exclusion images; output is NOT gate-valid")
+    ap.add_argument("--n-exp", type=int, default=None, help="seen group = the first N_exp exposed images of the split (default: exposure.n_exp; C2 arms: 563 / 141)")
+    ap.add_argument("--annotations", default=None, help="needed only for an --n-exp that is not a stored exposure set (default: paths.annotations)")
     add_check_args(ap)
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
@@ -65,16 +71,19 @@ def main() -> None:
     if split["content_hash"] != d0[0]["split"]["content_hash"]:
         sys.exit(f"d=0 metrics were not computed on {split_path}")
     excl = load_analysis_exclusion(cfg, args.include_b1_overlap)
+    seen = load_seen_definition(cfg, split, load_annotations(args.annotations) if args.annotations else None, args.n_exp)
     try:
         check_exclusion([(p, m) for p, m in zip(args.d0, d0)], excl)
+        check_seen([(p, m) for p, m in zip(args.d0, d0)], seen)
     except ValueError as e:
         sys.exit(str(e))
     base = read_json(args.base) if args.base else None
     if base is not None:  # the untrained base must be evaluated like the d=0 runs (adapter None by design)
         try:
             check_exclusion([(args.base, base)], excl)
+            check_seen([(args.base, base)], seen)
         except ValueError as e:
-            sys.exit(f"{e}; re-evaluate the base (scripts/evaluate_checkpoint.py) under the current B1 exclusion")
+            sys.exit(f"{e}; re-evaluate the base (scripts/evaluate_checkpoint.py --reuse-scores) under the current B1 exclusion and seen definition")
         for f in ("prompt_sha", "model"):
             want = {m.get("provenance", {}).get("generations", {}).get(f) for m in d0}
             got = base.get("provenance", {}).get("generations", {}).get(f)
@@ -103,7 +112,7 @@ def main() -> None:
 
     out = {"split": d0[0]["split"], "d0_files": [os.path.realpath(p) for p in args.d0],
            "manifest_split_sha256": cur if d0_shas == {cur} else None, "manifest_lock_sha256": frozen["manifest_lock_sha256"],
-           "analysis_exclusion": exclusion_record(excl, split, map(int, d0[0]["per_image"])), "sd_multiplier": k, "delta_S": {}, "delta_A": {}, "per_seed": {}}
+           "analysis_exclusion": exclusion_record(excl, split, map(int, d0[0]["per_image"]), seen), "seen_definition": seen_record(seen), "sd_multiplier": k, "delta_S": {}, "delta_A": {}, "per_seed": {}}
     out["base_check"] = "missing" if base is None else "present"
     out["base_file"] = os.path.realpath(args.base) if base is not None else None
     mark_validity(out, not args.allow_partial and cur is not None and base is not None, excl)
@@ -113,16 +122,20 @@ def main() -> None:
         out["per_seed"][f"unseen_mean/{f}"] = vals
     a_fields = sorted({mcfg["a_metric"], "cider_heldout", "spice_heldout"} & set(next(iter(d0[0]["per_image"].values()))))
     for f in a_fields:
-        seen = [group_mean(m, split, "seen", f, excl) for m in d0]
-        unseen = [group_mean(m, split, "unseen", f, excl) for m in d0]
-        out["delta_A"][f] = association_margin(seen, unseen, k)
-        out["per_seed"][f"seen_minus_unseen/{f}"] = list(np.subtract(seen, unseen))
+        s_means = [group_mean(m, split, "seen", f, excl, seen) for m in d0]
+        unseen = [group_mean(m, split, "unseen", f, excl, seen) for m in d0]
+        out["delta_A"][f] = association_margin(s_means, unseen, k)
+        out["per_seed"][f"seen_minus_unseen/{f}"] = list(np.subtract(s_means, unseen))
+        if analysis_ids(split, "seen_unexposed", map(int, d0[0]["per_image"]), excl, seen):  # empty when N_exp is the whole seen half
+            unexp = [group_mean(m, split, "seen_unexposed", f, excl, seen) for m in d0]
+            out["per_seed"][f"seen_unexposed_minus_unseen/{f}"] = list(np.subtract(unexp, unseen))  # reported only
     out["delta_A_primary_metric"] = mcfg["a_metric"]
     out["delta_A_coprimary_metric"] = mcfg.get("a_metric_coprimary")
     out["delta_V_rule"] = {"rel": mcfg["delta_v_rel"], "floor": mcfg["delta_v_floor"], "set_at": "G1 (Paired d=64)"}
 
     n_ex = out["analysis_exclusion"]["n_excluded"]
-    print(f"G0 margins on split {out['split']['name']} ({len(d0)} d=0 seeds, multiplier {k}); B1 overlap ({n_ex['seen']} seen, {n_ex['unseen']} unseen) "
+    print(f"G0 margins on split {out['split']['name']} ({len(d0)} d=0 seeds, multiplier {k}); seen = exposure set N_exp={seen['n_exp']} ({seen['ids_sha256'][:12]}); "
+          f"B1 overlap ({n_ex['seen']} seen, {n_ex['seen_unexposed']} seen_unexposed, {n_ex['unseen']} unseen) "
           f"{'INCLUDED (robustness, NOT gate-valid)' if args.include_b1_overlap else 'excluded'}:")
     for f, v in out["delta_S"].items():
         print(f"  delta_S[{f}] = {v:.4f}   unseen means per seed: {np.round(out['per_seed'][f'unseen_mean/{f}'], 4).tolist()}")

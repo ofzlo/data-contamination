@@ -6,7 +6,8 @@ metrics JSONs whose checkpoint_id names the cell, ``{condition}_d{d}_s{seed slot
 ``G<n>_`` prefix (e.g. ``paired_d16_s2``, ``G2_Caption_d8_s0``), or are given explicitly with
 ``--cell COND:D=path[,path...]`` (seed slots 0, 1, ... in the order given). The B1 analysis exclusion
 is left out; ``--include-b1-overlap`` gives the robustness view (from robustness margins and G1
-report; not gate-valid).
+report; not gate-valid). The seen group is the exposure set (``exposure.n_exp`` / ``--n-exp``); every
+input must record it.
 
 Example:
     python scripts/g2_report.py --split data/splits/split_A.json --margins outputs/g0/margins_A.json \
@@ -22,7 +23,8 @@ from pathlib import Path
 
 from contam.config import load_config, read_json, write_json
 from contam.data.freeze import add_check_args, cli_check
-from contam.eval.evaluate import load_analysis_exclusion, mark_validity
+from contam.data.nocaps import load_annotations
+from contam.eval.evaluate import load_analysis_exclusion, load_seen_definition, mark_validity
 from contam.eval.gates import CONDITION_NAMES, g2_report, g2_text, parse_run_id, validate_g2_inputs
 
 
@@ -44,6 +46,8 @@ def main() -> None:
     ap.add_argument("--checkpoints", nargs="*", default=[], help="metrics JSONs whose checkpoint_id names the cell")
     ap.add_argument("--cell", action="append", default=[], help="COND:D=path[,path...] for metrics whose checkpoint_id does not name the cell")
     ap.add_argument("--allow-partial", action="store_true", help="smoke tests only: allow partial metrics / incomplete grid; output is NOT gate-valid")
+    ap.add_argument("--n-exp", type=int, default=None, help="seen group = the first N_exp exposed images of the split (default: exposure.n_exp; C2 arms: 563 / 141)")
+    ap.add_argument("--annotations", default=None, help="needed only for an --n-exp that is not a stored exposure set (default: paths.annotations)")
     add_check_args(ap)
     ap.add_argument("--include-b1-overlap", action="store_true", help="robustness view: keep the B1 analysis exclusion images in every result; output is NOT gate-valid")
     ap.add_argument("--out", required=True, help="report JSON; the text report goes next to it (.txt)")
@@ -68,8 +72,9 @@ def main() -> None:
             cks.append(c)
             cms.append(read_json(c["metrics"]))
     excl = load_analysis_exclusion(cfg, args.include_b1_overlap)
-    validate_g2_inputs(split, margins, args.margins, g1, args.baseline, base, cks, cms, cfg, args.allow_partial, frozen["manifest_split_sha256"], excl)
-    report = g2_report(split, margins, g1, base, cks, cms, cfg, args.allow_partial, excl)
+    seen = load_seen_definition(cfg, split, load_annotations(args.annotations) if args.annotations else None, args.n_exp)
+    validate_g2_inputs(split, margins, args.margins, g1, args.baseline, base, cks, cms, cfg, args.allow_partial, frozen["manifest_split_sha256"], excl, seen)
+    report = g2_report(split, margins, g1, base, cks, cms, cfg, args.allow_partial, excl, seen)
     report.update(frozen)
     mark_validity(report, not args.allow_partial and frozen["manifest_split_sha256"] is not None, excl)
     report["inputs"] = {"margins": args.margins, "g1_report": args.g1_report, "baseline": list(args.baseline), "checkpoints": cks}

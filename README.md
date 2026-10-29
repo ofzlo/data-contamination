@@ -159,6 +159,8 @@ python scripts/evaluate_checkpoint.py --checkpoint-id d0_s0 --generations output
 #    and records that entry's sha256 (--skip-manifest-check: smoke tests only, output not gate-valid).
 #    Group means, Δ, margins and gates leave out the 20 B1 overlap images (all are still scored); every
 #    output records `analysis_exclusion`; --include-b1-overlap gives the robustness view (not gate-valid).
+#    "seen" is the N_exp = 1,000 exposure set (exposure.n_exp, --n-exp; recorded as `seen_definition`, prereg Section 2);
+#    seen_unexposed (the other 1,250 of the 50% set) is reported only. --reuse-scores regroups old metrics without re-scoring.
 #    G0 chain for the five d=0 checkpoints (steps 3 and 4, pipelined, resumable; --dry-run to preview):
 python scripts/run_g0_eval.py --split data/splits/split_A.json --run G0_d0_s0=CKPT0 ... --run G0_d0_s4=CKPT4
 # 4. G0 margins, G1 report, B3 prompt intervention

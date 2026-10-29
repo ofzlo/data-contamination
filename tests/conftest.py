@@ -7,7 +7,7 @@ import yaml
 from contam.config import DEFAULT_CONFIG, file_sha256, load_config, write_json
 from contam.data import freeze
 from contam.data.splits import make_split
-from contam.eval.evaluate import load_analysis_exclusion
+from contam.eval.evaluate import load_analysis_exclusion, load_seen_definition, seen_record
 
 
 def make_annotations(n_in=41, n_near=267, n_out=141, n_refs=10, seed=0):
@@ -39,6 +39,7 @@ def locked_split(tmp_path, split, n_boot=None):
     """
     raw = yaml.safe_load(DEFAULT_CONFIG.read_text())
     raw["paths"]["splits_dir"] = str(tmp_path / "splits")
+    raw["exposure"]["n_exp"] = len(split["seen"])  # the split's stored 50% set: no annotations needed (seen_def)
     if n_boot:
         raw["stats"]["n_boot"] = n_boot
     cfg_path, lock = tmp_path / "config.yaml", tmp_path / "lock.json"
@@ -52,6 +53,16 @@ def locked_split(tmp_path, split, n_boot=None):
 def excl_record():
     """The default config's B1 analysis exclusion, as the gate CLIs require their inputs to record it."""
     return load_analysis_exclusion(load_config())
+
+
+def seen_def(split, n_exp=None):
+    """The seen definition of ``split`` (default: its stored 50% set, as ``locked_split`` configs use)."""
+    return load_seen_definition(load_config(), split, n_exp=len(split["seen"]) if n_exp is None else n_exp)
+
+
+def seen_rec(split):
+    """``locked_split``'s seen definition as recorded in an output, as the CLIs require their inputs to record it."""
+    return seen_record(seen_def(split))
 
 
 @pytest.fixture
