@@ -1,8 +1,24 @@
 # Preregistration: Style Before Memory
 
-> **STATUS: DRAFT, NOT LOCKED.** Drafted by Yoorhim (W1, 2026-10-20). It is locked by team sign-off
-> before any exposed (d > 0) run starts. After locking, changes only go in a dated amendment
-> section at the end. `TODO(owner)` marks decisions owned by someone else.
+> **STATUS: LOCKED 2026-10-28** (Yoorhim), before the first exposed (d > 0) run (G1 d=4). The
+> open team items were locked at the values proposed in this document; the team's confirmation is
+> to be recorded under Amendments. From here on, changes go only in a dated amendment section at
+> the end. Drafted by Yoorhim (W1, 2026-10-20).
+
+**Decisions at lock (2026-10-28)**
+
+| Item | Locked value |
+|---|---|
+| Seen group | **Seen = the exposure set**: the N_exp = 1,000 images that exposed runs train on (`contam.data.exposure.exposure_ids`, nested 141 ⊂ 563 ⊂ 1,000 ⊂ 2,250). Unseen = the complement of the 50% set (2,250). The other 1,250 images of the 50% set are reported as "seen, unexposed" and never decide a gate. The B1 analysis exclusion applies on top. δ_A uses the same seen set. Section 2 gives the details. |
+| δ_V floor | 0.5 nats (summed), 0.02 nats per token |
+| Bootstrap B | 10,000 for final gate reports (2,000 elsewhere) |
+| G1(b) | One primary test: Paired × word count at d=4, pooled CI lower bound > δ_S and every seed > δ_S (Section 6) |
+| G2 primary | Two-level bootstrap equivalence (Section 5), revisited only by amendment after σ_seed is estimated |
+| G2 verdict | Primary only; the secondary (τ difference CI) is reported, not gating. τ_style is taken from Paired. |
+| "Upper 95% CI" | The 97.5th percentile (upper bound of the two-sided 95% interval) |
+| τ_style on boilerplate | Reported, not gating |
+| C9 detector rule | As proposed in Section 7 |
+| A metric with the long-form p_cap | SPICE held-out is a co-primary A metric (D3) |
 
 Implementation: `src/contam/` (see README, "Evaluation pipeline"). Equation numbers follow the
 proposal (`docs/CSE576_Project.pdf`): eq. 1 generation, eq. 2 group score, eq. 3 Δ, eq. 4 Γ.
@@ -253,7 +269,7 @@ across the five d=0 training seeds.
   - E is the pooled point estimate of the Paired d=64 V effect (mean seen ΔRMI, summed), taken at G1.
   - `floor` is a named config value: `margins.delta_v_floor.rmi_sum`, a PLACEHOLDER of 0.5 nats.
     The per-token variant uses a placeholder of 0.02 nats per token.
-  - TODO(team): fix the floor values before G1 results are seen.
+  - Locked 2026-10-28 at these values (0.5 summed, 0.02 per token).
 - **δ_Q** = 5 points of human win rate. This is for G4 and is not computed by this code.
 
 The script `scripts/compute_margins.py` produces δ_S and δ_A. The script `scripts/gate_report.py`
@@ -265,7 +281,7 @@ produces δ_V at G1.
   - Every replicate draws one index vector per group (seen and unseen resampled separately) and
     applies it to every checkpoint being compared.
   - Percentile CIs, 95%, two-sided. B = 2,000 by default (`stats.n_boot`, fixed bootstrap seed).
-  - TODO(team): use B = 10,000 for the final gate reports.
+  - Locked 2026-10-28: B = 10,000 for the final gate reports.
 - **Seeds.** Per-seed values are reported. Pooled values average each image's score across training
   seeds before bootstrapping. The d=0 reference is always the pool of all five d=0 seeds.
 - **Threshold τ.** τ = the smallest d whose effect CI lower bound exceeds δ, from a monotone fit
@@ -281,7 +297,7 @@ produces δ_V at G1.
   - τ_style uses the primary S metric `gates.tau_style_metric` (word count), as a directional effect
     on unseen images, with δ_S.
   - τ_memory uses mean seen ΔRMI (summed), with δ_V.
-  - TODO(team): should τ_style also be computed on boilerplate rate and reported?
+  - Locked 2026-10-28: τ_style on boilerplate rate is also computed and reported, not gating.
 - **τ_memory − τ_style on log₂ d.**
   1. In each replicate, compute both components from the same resampled images.
   2. Each replicate's crossing τ*_b is the first dose whose fitted effect exceeds δ, linearly
@@ -302,8 +318,8 @@ produces δ_V at G1.
   (`gates.g2_equivalence_rule: two_level_bootstrap`). Each replicate resamples the 3 seeds of the
   cell and the 5 d=0 seeds (with replacement), pools each image over the drawn seeds, then
   resamples images, so the CI includes training-seed variance.
-  - Proposed by Yoorhim on the basis of the Section 6 G2 table. TODO(team): sign-off; revisit after
-    σ_seed for ΔRMI is estimated from the G0 seeds and the G1 seed pairs.
+  - Proposed by Yoorhim on the basis of the Section 6 G2 table. Locked 2026-10-28. Any change
+    after σ_seed for ΔRMI is estimated from the G0 seeds and the G1 seed pairs goes in an amendment.
   - Known limitation: resampling k = 3 seeds with replacement understates the seed variance by
     (k − 1)/k, and 3 seeds allow only 10 distinct resamples. Boundary false PASS is therefore still
     above nominal at large σ_seed: 0.046 at σ_seed 0.4 in Section 6. An independent reviewer
@@ -315,8 +331,8 @@ produces δ_V at G1.
     passes far more often than 2.5% when σ_seed > 0. Three alternatives are computed and reported,
     not gating: the image-bootstrap CI only; that CI AND every seed's point estimate below δ_V
     (mirroring G1(b)); a seed-level t interval (df = 2) over the per-seed estimates.
-  - TODO(team): the plan says "upper 95% CI". A one-sided 95% bound (the 90% two-sided interval)
-    would be the standard TOST convention. This draft uses the stricter 97.5th percentile.
+  - The plan says "upper 95% CI". A one-sided 95% bound (the 90% two-sided interval) would be the
+    standard TOST convention. Locked 2026-10-28 at the stricter reading, the 97.5th percentile.
 
 ## 6. Gates and pass rules
 
@@ -363,7 +379,7 @@ reading implemented in `scripts/gate_report.py`.
   | 0.5    | 0.008      | 0.009                | 0.020             |
   | 1      | 0.014      | 0.018                | 0.039             |
   | 2      | 0.010      | 0.025                | 0.053             |
-- *Proposed by Yoorhim. TODO(team): sign-off.*
+- *Proposed by Yoorhim. Locked 2026-10-28.*
 - *(c) is manual.*
 
 **G2. Where are τ_style and τ_memory? (RQ1 main)**
@@ -416,13 +432,13 @@ reading implemented in `scripts/gate_report.py`.
   10% at 1.2 × δ_V with σ_seed 0.4. Only the two-level bootstrap (≤ 4.6%) and the seed t interval
   (≤ 4.4%) stay near nominal, at a clear cost in power; the two-level bootstrap has more power
   than the t interval, so it is the default. It is still above 2.5% at σ_seed 0.4 (0.046): three
-  seeds per cell cannot pin down seed variance. TODO(team): sign off, and revisit after estimating
-  σ_seed for ΔRMI from the five G0 seeds and the G1 seed pairs.*
+  seeds per cell cannot pin down seed variance. Locked 2026-10-28; any revision after estimating
+  σ_seed for ΔRMI from the five G0 seeds and the G1 seed pairs goes in an amendment.*
 - *Secondary: the bootstrap CI of log₂ τ*_memory − log₂ τ*_style (Section 5 censoring rules) has
   lower bound > 0; censoring fractions are reported.*
 - *The fallback above is reported whenever τ̂_style = τ̂_memory (finite).*
-- *TODO(team): should τ_style come from Paired, or from Caption? Should a failed secondary also
-  fail G2?*
+- *Locked 2026-10-28: τ_style comes from Paired; Caption is reported. A failed secondary does not
+  fail G2; the verdict is the primary.*
 
 **G3. Does the order replicate on a new split?**
 - Conditions: split B, {Caption, Paired} × {d_style, d_memory} × 2 seeds, d=0 shared.
@@ -466,12 +482,13 @@ reading implemented in `scripts/gate_report.py`.
     SameDist and the C3 counterstyle checkpoints (C9). On base and d=0 there is no exposure, so
     the d=0 spread of each detector's AUROC (mean and SD across the five seeds, `run_detectors.py
     report`) is its null band.
-  - Proposed rule for C9 (TODO(team): sign-off before G1 results): a detector flags a checkpoint if
+  - Rule for C9 (locked 2026-10-28, before G1 results): a detector flags a checkpoint if
     the lower CI bound of its seen-vs-unseen AUROC exceeds the d=0 mean + 2 × SD across the five
     seeds (the D5 convention). KDS is one number per set, so it is reported, not thresholded.
-- TODO(team): sign off on the single-primary G1(b) rule in Section 6, which settles the
-  multiple-comparison question at G1. The same question is still open for G2's τ_style metric.
-- TODO(team, raised by Yoorhim after W1): CIDEr-D and a long-form p_cap. With the current p_cap,
+- Locked 2026-10-28: the single-primary G1(b) rule in Section 6 settles the multiple-comparison
+  question at G1. For G2, τ_style uses word count; boilerplate is reported only.
+- Resolved 2026-10-25 by D3 (SPICE held-out co-primary A metric). Raised by Yoorhim after W1:
+  CIDEr-D and a long-form p_cap. With the current p_cap,
   base CIDEr-D is ≈0 (Section 3). Any exposure that shortens captions toward NoCaps length then
   moves CIDEr-D from ≈0 to ≈100 through the length penalty alone. That inflates the primary A
   metric (Δ on held-out CIDEr, eq. 3) with an S effect. Options:
@@ -486,4 +503,6 @@ reading implemented in `scripts/gate_report.py`.
 
 ## Amendments
 
-None yet. The document is not locked.
+- 2026-10-28: locked by Yoorhim at the proposed values (header table), before the first exposed
+  run. TODO(team): record each member's confirmation here; a disagreement is resolved by amendment
+  before the G1 results are seen.
