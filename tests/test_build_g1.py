@@ -132,6 +132,19 @@ def test_refuses_changed_data_file(env):
         _build(env, conditions=("Paired",), doses=(4,), slots=(0,))
 
 
+def test_specs_written_once(env):
+    _build(env, conditions=("Paired",), doses=(4,), slots=(0,))
+    spec = env["out"] / "G1" / "G1_Paired_d4_s0.json"
+    before = (spec.read_bytes(), spec.stat().st_mtime_ns)
+    _build(env, conditions=("Paired",), doses=(4,), slots=(0,))  # identical content: no-op
+    assert (spec.read_bytes(), spec.stat().st_mtime_ns) == before
+    s = read_json(spec)
+    write_json({**s, "train_seed": s["train_seed"] + 1}, spec)  # e.g. a spec a run was launched from, edited by hand
+    with pytest.raises(SystemExit, match="exists with different content"):
+        _build(env, conditions=("Paired",), doses=(4,), slots=(0,))
+    assert read_json(spec)["train_seed"] == s["train_seed"] + 1 and not list(spec.parent.glob("*.new"))
+
+
 def test_refuses_manifest_mismatch(env):
     p = env["tmp"] / "splits" / "samedist_A.json"
     sd = read_json(p)
@@ -165,6 +178,31 @@ def test_refuses_bad_doses_and_slots(env):
         _build(env, slots=(5,))
     with pytest.raises(SystemExit, match="K = N_exp x d"):
         bg1.build(env["cfg"], "A", ["Paired"], [16], [0], M, N_EXP, env["out"], "G1", env["lock"], check_images=False)
+
+
+def test_exploratory_runs(env):
+    res = bg1.build(env["cfg"], "A", ["Paired", "SameDist"], [2], [0], M, 30, env["out"], "G1", env["lock"], check_images=False, exploratory=True)
+    assert res["exploratory"] is True and res["runs"] == ["EX_Paired_d2_n30_s0", "EX_SameDist_d2_n30_s0"]
+    for run_id in res["runs"]:
+        s = read_json(env["out"] / "EX" / f"{run_id}.json")
+        assert (s["gate"], s["exploratory"], s["d"], s["N_exp"], s["K"]) == ("EX", True, 2, 30, 60)
+        assert parse_run_id(s["run_id"]) is None  # no gate parses (or accepts) an exploratory run id
+    assert set(exposure_ids(env["split"], env["ann"], 30)) < set(exposure_ids(env["split"], env["ann"], N_EXP))  # nested with the main set
+    assert not (env["out"] / "G1").exists()
+    plain = _build(env, conditions=("Paired",), doses=(4,), slots=(0,))
+    assert plain["exploratory"] is False and "exploratory" not in read_json(env["out"] / "G1" / "G1_Paired_d4_s0.json")
+    with pytest.raises(SystemExit, match="reserved"):
+        bg1.build(env["cfg"], "A", ["Paired"], [4], [0], M, N_EXP, env["out"], "EX", env["lock"], check_images=False)
+
+
+def test_prereg_grid_check(env):
+    cfg = env["cfg"]
+    bg1.check_prereg_grid(cfg, "A", [1, 4, 16, 64], cfg["exposure"]["n_exp"])
+    bg1.check_prereg_grid(cfg, "A", [4], len(env["split"]["seen"]))  # a stored exposure-set size (C2 arms)
+    with pytest.raises(SystemExit, match="--exploratory"):
+        bg1.check_prereg_grid(cfg, "A", [2], cfg["exposure"]["n_exp"])
+    with pytest.raises(SystemExit, match="--exploratory"):
+        bg1.check_prereg_grid(cfg, "A", [4], 30)
 
 
 def test_nocaps_link(env):

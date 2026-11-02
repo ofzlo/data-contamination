@@ -23,6 +23,12 @@ Writes, under --out (default <outputs_dir>/runs):
     data/{split}_{cond}_d{d}_M{M}_nexp{N}.json            LLaVA-format training file (M examples)
     data/{split}_{cond}_d{d}_M{M}_nexp{N}.exposure.json   the exposed rows + meta (contam.data.exposure)
     {gate}/{gate}_{Condition}_d{d}_s{slot}.json           one run spec per cell and seed slot
+    EX/EX_{Condition}_d{d}_n{N}_s{slot}.json              --exploratory: the same, outside every gate
+
+``--exploratory`` (docs/deviations.md) allows doses outside the prereg grid (e.g. 2) and any N_exp. Its
+specs get gate ``EX``, run ids ``EX_{Condition}_d{d}_n{N_exp}_s{slot}`` (never parsed by
+``contam.eval.gates.parse_run_id``, so no gate accepts them) and ``"exploratory": true``. Without it,
+doses must be in the prereg grid and N_exp must be ``exposure.n_exp`` or a stored exposure-set size.
 
 Example (G1's d=4 cells, first seed slot):
     python scripts/build_g1.py --M 130000 --n-exp 1000 --conditions Caption Paired SameDist --doses 4 --slots 0 --link-nocaps
@@ -46,6 +52,7 @@ from contam.train import find_missing_images
 # run-id spelling (contam.eval.gates.CONDITION_NAMES) -> contam.data.exposure condition
 CONDITIONS = {"Caption": "caption", "Paired": "paired", "SameDist": "samedist", "Image": "image", "Shuffled": "shuffled"}
 DOSES = (1, 4, 16, 64)
+EXPLORATORY_GATE = "EX"
 NOCAPS_IMAGE_CONDITIONS = ("Paired", "Image", "Shuffled")  # read NoCaps images (SameDist reads COCO, Caption none)
 # prereg Section 2: training targets are the normalized references of annotations.json
 REF_NORMALIZATION = {"strip_whitespace": True, "strip_trailing_not_sign": True}
@@ -65,20 +72,28 @@ def ensure_nocaps_link(cfg: dict, create: bool) -> Path:
     return link
 
 
-def _write_once(obj, path: Path) -> str:
-    """Write ``obj`` to ``path`` unless a different file is already there (a run may train on it); returns its sha256."""
+def _write_once(obj, path: Path, indent: int | None = None) -> str:
+    """Write ``obj`` to ``path`` unless a different file is already there (a run may train on it or record
+    it); identical content is a no-op. Returns its sha256."""
     tmp = path.with_name(path.name + ".new")
-    write_json(obj, tmp, indent=None)
+    write_json(obj, tmp, indent=indent)
     sha = file_sha256(tmp)
     if path.exists() and file_sha256(path) != sha:
         tmp.unlink()
         raise SystemExit(f"{path} exists with different content (sha256 {file_sha256(path)}, new {sha}); move it away to rebuild")
-    tmp.replace(path)
+    if path.exists():
+        tmp.unlink()  # identical: leave the existing file (and its mtime) alone
+    else:
+        tmp.replace(path)
     return sha
 
 
 def build(cfg: dict, split_name: str, conditions, doses, slots, M: int, n_exp: int, out: Path, gate: str = "G1",
-          lock_path=DEFAULT_LOCK, base_captions_path=None, check_images: bool = True) -> dict:
+          lock_path=DEFAULT_LOCK, base_captions_path=None, check_images: bool = True, exploratory: bool = False) -> dict:
+    if exploratory:
+        gate = EXPLORATORY_GATE
+    elif gate == EXPLORATORY_GATE:
+        raise SystemExit(f"gate {EXPLORATORY_GATE} is reserved for --exploratory runs")
     conditions, doses, slots = list(conditions), sorted(set(int(d) for d in doses)), sorted(set(int(s) for s in slots))
     bad = [c for c in conditions if c not in CONDITIONS]
     if bad:
@@ -162,7 +177,7 @@ def build(cfg: dict, split_name: str, conditions, doses, slots, M: int, n_exp: i
             for k in slots:
                 spec = {
                     "gate": gate,
-                    "run_id": f"{gate}_{cond}_d{d}_s{k}",
+                    "run_id": f"{gate}_{cond}_d{d}_n{n_exp}_s{k}" if exploratory else f"{gate}_{cond}_d{d}_s{k}",
                     "condition": cond,
                     "d": d,
                     "K": K,
@@ -179,9 +194,22 @@ def build(cfg: dict, split_name: str, conditions, doses, slots, M: int, n_exp: i
                     "eval_splits": eval_splits,
                     "eval_temperatures": [0.0, 1.0],
                 }
-                write_json(spec, spec_dir / f"{spec['run_id']}.json")
+                if exploratory:
+                    spec["exploratory"] = True
+                _write_once(spec, spec_dir / f"{spec['run_id']}.json", indent=1)  # same bytes as write_json's default
                 runs.append(spec["run_id"])
-    return {"runs": runs, "cells": cells, "M": M, "N_exp": n_exp, "split": split_name, "manifest_lock_sha256": lock_sha}
+    return {"runs": runs, "cells": cells, "M": M, "N_exp": n_exp, "split": split_name, "manifest_lock_sha256": lock_sha, "exploratory": exploratory}
+
+
+def check_prereg_grid(cfg: dict, split_name: str, doses, n_exp: int) -> None:
+    """Without --exploratory: doses from the prereg grid, N_exp = exposure.n_exp or a stored exposure-set size."""
+    bad = sorted(set(int(d) for d in doses) - set(DOSES))
+    if bad:
+        raise SystemExit(f"doses {bad} are not in the prereg grid {list(DOSES)}; exploratory doses need --exploratory")
+    stored = {len(v) for v in read_json(Path(cfg["paths"]["splits_dir"]) / f"split_{split_name}.json")["exposure_sets"].values()}
+    allowed = {int(cfg["exposure"]["n_exp"])} | stored
+    if n_exp not in allowed:
+        raise SystemExit(f"N_exp={n_exp} is not exposure.n_exp or a stored exposure-set size {sorted(allowed)}; exploratory N_exp needs --exploratory")
 
 
 def main() -> None:
@@ -191,9 +219,11 @@ def main() -> None:
     ap.add_argument("--n-exp", type=int, default=None, help="exposed images (D2; default: config exposure.n_exp)")
     ap.add_argument("--split", default="A")
     ap.add_argument("--conditions", nargs="+", default=["Caption", "Paired", "SameDist"], choices=list(CONDITIONS))
-    ap.add_argument("--doses", nargs="+", type=int, default=[4, 64], choices=DOSES)
+    ap.add_argument("--doses", nargs="+", type=int, default=[4, 64], help=f"prereg grid {list(DOSES)}; other doses need --exploratory")
     ap.add_argument("--slots", nargs="+", type=int, default=[0, 1], help="training seed slots")
     ap.add_argument("--gate", default="G1", help="run-id prefix and spec subdirectory")
+    ap.add_argument("--exploratory", action="store_true", help=f"allow doses / N_exp outside the prereg grid; forces gate {EXPLORATORY_GATE} and run ids "
+                    f"{EXPLORATORY_GATE}_<Condition>_d<d>_n<N_exp>_s<slot> (docs/deviations.md)")
     ap.add_argument("--base-captions", default=None, help="Image condition: contam.generate file of the untrained base model")
     ap.add_argument("--link-nocaps", action="store_true", help="create <llava_images>/nocaps -> <images_dir> if missing")
     ap.add_argument("--out", default=None, help="default: <outputs_dir>/runs")
@@ -202,10 +232,16 @@ def main() -> None:
     cfg = load_config(args.config)
     if args.n_exp is None:
         args.n_exp = int(cfg["exposure"]["n_exp"])
+    if args.exploratory:
+        if args.gate not in ("G1", EXPLORATORY_GATE):
+            raise SystemExit(f"--exploratory runs always use gate {EXPLORATORY_GATE}, not {args.gate}")
+    else:
+        check_prereg_grid(cfg, args.split, args.doses, args.n_exp)
     if set(args.conditions) & set(NOCAPS_IMAGE_CONDITIONS):
         ensure_nocaps_link(cfg, args.link_nocaps)
     out = Path(args.out) if args.out else Path(cfg["paths"]["outputs_dir"]) / "runs"
-    print(json.dumps(build(cfg, args.split, args.conditions, args.doses, args.slots, args.M, args.n_exp, out, args.gate, args.lock, args.base_captions), indent=1))
+    print(json.dumps(build(cfg, args.split, args.conditions, args.doses, args.slots, args.M, args.n_exp, out, args.gate, args.lock, args.base_captions,
+                           exploratory=args.exploratory), indent=1))
 
 
 if __name__ == "__main__":

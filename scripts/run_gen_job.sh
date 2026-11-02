@@ -1,7 +1,8 @@
 #!/bin/bash
 # GPU stages of evaluation for trained checkpoints: T=0 caption generation under p_cap and
 # teacher-forced scoring of all 10 references (inputs to S/A/V/Q). Both stages are resumable; on a
-# SLURM time limit the running stage is stopped and the job requeues itself. CPU evaluation
+# SLURM time limit (USR1) the running stage is stopped and the job requeues itself; TERM / HUP (scancel)
+# stop it and exit 75 without requeueing. CPU evaluation
 # (evaluate_checkpoint) runs separately.
 #
 #   RUN_IDS="G1_Paired_d4_s0" bash scripts/run_gen_job.sh              # interactive GPU session
@@ -32,16 +33,26 @@ stamp() { echo "[$(date '+%F %T')] $*"; }
 
 child=0
 stopping=0
+requeue=0
 on_signal() {
     stamp "got $1; stopping the running stage (pid $child)"
     stopping=1
+    [ "$1" = USR1 ] && requeue=1  # only the time-limit warning requeues; scancel (TERM) / HUP just stop
     [ "$child" -gt 0 ] && kill -TERM "$child" 2>/dev/null
+}
+stop_now() {
+    if [ "$requeue" -eq 1 ] && [ -n "${SLURM_JOB_ID:-}" ] && [ "${SLURM_JOB_NAME:-}" = "gen_eval" ] && [ -z "${NO_REQUEUE:-}" ]; then
+        stamp "requeueing job $SLURM_JOB_ID"
+        scontrol requeue "$SLURM_JOB_ID"
+    fi
+    exit 75
 }
 trap 'on_signal USR1' USR1
 trap 'on_signal TERM' TERM
 trap 'on_signal HUP' HUP
 
 run() {
+    [ "$stopping" -eq 1 ] && stop_now  # a signal arrived between stages
     stamp "stage: $*"
     "$@" &
     child=$!
@@ -50,13 +61,7 @@ run() {
         kill -0 "$child" 2>/dev/null || break
     done
     child=0
-    if [ "$stopping" -eq 1 ]; then
-        if [ -n "${SLURM_JOB_ID:-}" ] && [ "${SLURM_JOB_NAME:-}" = "gen_eval" ] && [ -z "${NO_REQUEUE:-}" ]; then
-            stamp "requeueing job $SLURM_JOB_ID"
-            scontrol requeue "$SLURM_JOB_ID"
-        fi
-        exit 75
-    fi
+    [ "$stopping" -eq 1 ] && stop_now
     [ "$rc" -eq 0 ] || { stamp "FAILED (exit $rc): $*"; exit "$rc"; }
 }
 
