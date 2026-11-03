@@ -3,6 +3,23 @@
 작성 2026-11-02 · Yoorhim · **EXPLORATORY** (gate input 아님; 결정 기록과 이유는 `docs/deviations.md` 2026-11-02)
 이전 문서: `docs/results/style_before_memory_explore_20261102.md` (긴 p_cap 기준 dose/K-sweep)
 
+## 업데이트 2026-11-03: seed 보강 (d=2 s1, SameDist d=1 s1)
+
+이번에 추가한 run은 EX_Paired_d2_n1000_s1, EX_Caption_d2_n1000_s1, G2_SameDist_d1_s1 세 개다. 새 결과는 `outputs/explore/full_20261103/`, `short_20261103/`, `style_20261103/`에 있고 모두 B = 10,000으로 계산했다. 아래 본문은 2026-11-02 시점의 결과다.
+
+- **d=1 Paired − SameDist(unseen CIDEr heldout)가 seed 2쌍으로도 유지된다 → (A)**
+  - s0·s1 pooled: **+4.13 [2.75, 5.49]**. 이제 seed 변동이 CI에 들어 있다.
+  - seed별: s0 +4.16, s1 +4.10
+  - 도메인별: near **+4.36 [2.59, 6.17]**, out **+4.43 [2.15, 6.87]**, in +1.62 [−3.30, 6.86]
+  - SPICE 차이: **+0.49 [0.27, 0.72]**
+  - d=4(−2.93)와 d=64(+3.12)는 변하지 않았다. 차이가 dose에 대해 단조롭지 않다는 단서는 그대로다.
+- **τ_latent = 2가 seed 2개로 유지된다 (긴 프롬프트).** Paired d=2의 seen ΔRMI는 13.59 [13.08, 14.10]로 δ_V 6.92를 넘는다. τ_verbatim = 4, τ_style = 1도 변하지 않았다.
+- **짧은 프롬프트 수치 (seed 2개 기준)**
+  - d=2 Paired: unseen CIDEr Δ +2.01 [0.40, 3.64]
+  - d=1 SameDist: unseen CIDEr Δ +1.90 [0.41, 3.41]
+  - Paired d=2 seen all10 분해: 전체 17.38, 스타일 몫 3.81, seen-specific share **13.57 [9.49, 17.79]**
+  - SameDist d=1 음성 대조군의 seen-specific share: −1.38 [−4.50, 1.64]. 0과 구별되지 않는다.
+
 ## 결론 (먼저)
 
 **판정: (A)를 조건부로 지지한다.**
