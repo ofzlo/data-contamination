@@ -37,10 +37,15 @@ def main() -> None:
     add_check_args(ap)
     ap.add_argument("--include-b1-overlap", action="store_true", help="robustness view: keep the B1 analysis exclusion images in every result; output is NOT gate-valid")
     ap.add_argument("--specs", default=None, help="build_g1.py run specs to cross-check exposure sets against (default: <outputs_dir>/runs/G1; skipped if absent)")
+    ap.add_argument("--n-boot", type=int, default=None, help="bootstrap replicates (default: stats.n_boot; prereg Section 5: B = 10,000 for final gate reports); recorded in the output")
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
 
     cfg = load_config(args.config)
+    if args.n_boot is not None:
+        if args.n_boot < 1:
+            raise SystemExit("--n-boot must be >= 1")
+        cfg["stats"]["n_boot"] = args.n_boot
     man = load_yaml(args.manifest)
     frozen = cli_check(args, cfg, man["split"], "gate_report")
     split = read_json(man["split"])
@@ -60,6 +65,7 @@ def main() -> None:
         print(f"WARNING: {msg}", file=sys.stderr)
     report = g1_report(split, margins, base, cks, cms, cfg, args.allow_partial, excl, seen)
     report.update(frozen)
+    report["n_boot"] = cfg["stats"]["n_boot"]
     mark_validity(report, not args.allow_partial and frozen["manifest_split_sha256"] is not None, excl)
     # realpaths, so later checks against these files (scripts/g2_report.py) do not depend on the cwd
     report["margins_file"] = os.path.realpath(man["margins"])

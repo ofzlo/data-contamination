@@ -190,6 +190,11 @@ def test_margins_and_gate_report_cli(tmp_path, g1_setup):
     g1 = read_json(tmp_path / "g1.json")
     assert g1["gate_valid"] is True and g1["analysis_exclusion"]["image_ids"] == sorted(out_ids)
     assert g1["cells"]["Paired/d4"]["pooled"]["n_unseen"] == len(kept)
+    assert g1["n_boot"] == 100 and g1["cells"]["Paired/d4"]["pooled"]["S"]["word_count"]["unseen"]["n_boot"] == 100
+    r = gate(tmp_path / "m.json", "--n-boot", "150")  # explicit B overrides stats.n_boot and is recorded
+    assert r.returncode == 0, r.stderr
+    g1b = read_json(tmp_path / "g1.json")
+    assert g1b["n_boot"] == 150 and g1b["cells"]["Paired/d4"]["pooled"]["S"]["word_count"]["unseen"]["n_boot"] == 150 and g1b["gate_valid"] is True
     r = gate(tmp_path / "mr.json")
     assert r.returncode != 0 and "margins was made with the B1 overlap" in r.stderr
     r = gate(tmp_path / "m.json", "--include-b1-overlap")

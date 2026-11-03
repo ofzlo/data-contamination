@@ -328,3 +328,122 @@ def test_eval_jobs_stop_and_requeue_only_on_usr1(tmp_path, script, job_name, sig
     assert ((tmp_path / "scontrol").exists() and (tmp_path / "scontrol").read_text().strip() == "requeue 123") == requeues, out
     if when == "between":
         assert "contam.generate" not in calls.read_text()  # no stage started after the signal
+
+
+# ----------------------------------------------------------------------------- formal short-prompt analysis (two-level bootstrap)
+
+
+def test_two_level_group_means_matches_stats_bootstrap_two_level():
+    from contam.eval import stats
+
+    rng = np.random.default_rng(1)
+    M, B = rng.normal(1, 1, (2, 40)), rng.normal(0, 1, (5, 40))
+    ref = stats.bootstrap_two_level(M, B, n_boot=700, seed=3)  # crosses a chunk boundary (CHUNK = 500)
+    pt, rp = ed.two_level_group_means({"m": M[..., None], "b": B[..., None]}, {"g": np.arange(40)}, n_boot=700, seed=3)
+    np.testing.assert_allclose(rp["m"]["g"][:, 0] - rp["b"]["g"][:, 0], ref.replicates, atol=1e-12)
+    assert pt["m"]["g"][0] - pt["b"]["g"][0] == pytest.approx(ref.estimate)
+
+
+def test_two_level_group_means_links_and_groups():
+    rng = np.random.default_rng(2)
+    A = rng.normal(0, 1, (3, 30, 2))
+    pt, rp = ed.two_level_group_means({"a": A + 1.0, "b": A}, {"x": np.arange(10), "y": np.arange(10, 30)}, links={"b": "a"}, n_boot=200, seed=0)
+    np.testing.assert_allclose(rp["a"]["x"] - rp["b"]["x"], 1.0)  # seed-matched and image-paired: a − b is exactly the shift
+    _, rp2 = ed.two_level_group_means({"a": A + 1.0, "b": A}, {"x": np.arange(10)}, n_boot=200, seed=0)
+    assert np.std(rp2["a"]["x"][:, 0] - rp2["b"]["x"][:, 0]) > 0.01  # independent seed draws
+    assert pt["a"]["y"].shape == (2,)
+    with pytest.raises(ValueError, match="cannot share"):
+        ed.two_level_group_means({"a": A, "b": A[:2]}, {"x": np.arange(10)}, links={"b": "a"}, n_boot=10)
+
+
+def _with_all10(e):
+    """Synthetic all10 / train scores: the training caption among the refs lifts a memorised (exact-match) caption."""
+    for r in e["m"]["per_image"].values():
+        r["cider_all10"] = r["cider_heldout"] + 50.0 * r["exact_match_train"]
+        r["spice_all10"] = r["spice_heldout"] + 5.0 * r["exact_match_train"]
+        r["cider_train"] = 5.0 + 500.0 * r["exact_match_train"]
+    return e
+
+
+def _short(env, cid, seed=0, **kw):
+    return _with_all10(_entry(env, cid, prompt_id="nocaps_like", seed=seed, **kw))
+
+
+def test_formal_cell(env):
+    d0 = [_short(env, f"G0_d0_s{s}", seed=s) for s in range(3)]
+    dom = {a["image_id"]: a["domain"] for a in env["ann"]}
+    model = [_short(env, "EX_Paired_d4_n30_s0", short=3, memorize=0.8), _short(env, "EX_Paired_d4_n30_s1", seed=1, short=3, memorize=0.6)]
+    res = ed.formal_cell(model, d0, env["split"], env["excl"], env["seen_defs"](30), env["seen_defs"], dom, KW)  # seen_unexposed = seen outside the 30
+    assert {"seen", "seen_unexposed", "unseen", "unseen/in-domain", "unseen/near-domain", "unseen/out-domain"} <= set(res["n"])
+    assert sum(res["n"][g] for g in res["n"] if g.startswith("unseen/")) == res["n"]["unseen"]
+    lv = res["levels"]["cider_heldout"]["unseen"]
+    assert lv["diff"]["ci_lo"] > 1 and lv["diff"]["estimate"] == pytest.approx(lv["model"]["estimate"] - lv["d0"]["estimate"])
+    dc = res["decomposition"]["cider_all10"]
+    assert dc["seen_specific"]["ci_lo"] > 20  # 50 × ~70% memorised
+    assert dc["total"]["estimate"] == pytest.approx(dc["style"]["estimate"] + dc["seen_specific"]["estimate"])
+    assert abs(dc["style"]["estimate"] - res["levels"]["cider_all10"]["seen_unexposed"]["diff"]["estimate"]) < 1e-9
+    assert set(res["per_seed"]) == {"EX_Paired_d4_n30_s0", "EX_Paired_d4_n30_s1"}
+    em = [res["per_seed"][c]["levels"]["exact_match_train"]["seen"]["diff"]["estimate"] for c in ("EX_Paired_d4_n30_s0", "EX_Paired_d4_n30_s1")]
+    assert em[0] > em[1] and res["levels"]["exact_match_train"]["seen"]["diff"]["estimate"] == pytest.approx(np.mean(em))
+    assert "cider_all10" in res["A"] and res["A"]["cider_all10"]["ci_lo"] > 0
+
+
+def test_formal_contrast_is_seed_matched(env):
+    dom = {a["image_id"]: a["domain"] for a in env["ann"]}
+    seen = env["seen_defs"](env["main_n"])
+    p = [_short(env, "G1_Paired_d4_s0", short=2), _short(env, "G1_Paired_d4_s1", seed=1, short=2)]
+    s = [_short(env, "G1_SameDist_d4_s1", seed=5)]
+    c = ed.formal_contrast(p, s, env["split"], env["excl"], seen, env["seen_defs"], dom, KW)
+    assert c["slots"] == [1] and c["unmatched"] == [0] and c["a_ids"] == ["G1_Paired_d4_s1"] and "per_pair" not in c
+    assert set(c["pooled"]["cider_heldout"]) == {"unseen", "unseen/in-domain", "unseen/near-domain", "unseen/out-domain"}
+    assert c["pooled"]["cider_heldout"]["unseen"]["diff"]["ci_lo"] > 0.5
+    # sensitivity: every seed of each side, own seed draws; the 1-seed side has no seed variance
+    u = ed.formal_contrast(p, s, env["split"], env["excl"], seen, env["seen_defs"], dom, KW, seed_matched=False)
+    assert u["seed_matched"] is False and u["a_slots"] == [0, 1] and u["b_slots"] == [1] and u["a_ids"] == ["G1_Paired_d4_s0", "G1_Paired_d4_s1"]
+    assert "per_pair" not in u
+    pa = [ed.rebind_seen(e["m"], seen, env["seen_defs"]) for e in p]
+    ids = ed.analysis_ids(env["split"], "unseen", [int(i) for i in pa[0]["per_image"]], env["excl"], seen)
+    sb = ed.rebind_seen(s[0]["m"], seen, env["seen_defs"])
+    want = np.mean([np.mean([m["per_image"][str(i)]["cider_heldout"] for m in pa]) - sb["per_image"][str(i)]["cider_heldout"] for i in ids])
+    assert u["pooled"]["cider_heldout"]["unseen"]["diff"]["estimate"] == pytest.approx(want)
+
+
+def test_formal_prompt_writes_tables_and_figures(env):
+    d0 = [_short(env, f"G0_d0_s{s}", seed=s) for s in range(3)]
+    base = _short(env, "base", seed=9)
+    entries = [_short(env, "G2_Paired_d1_s0", short=2, memorize=0.05), _short(env, "G2_Paired_d1_s1", seed=1, short=2), _short(env, "G2_SameDist_d1_s0", short=1),
+               _short(env, "G1_Paired_d4_s0", short=2, memorize=0.8), _short(env, "G1_Paired_d4_s1", seed=1, short=2, memorize=0.7),
+               _short(env, "G1_SameDist_d4_s0", short=1), _short(env, "G1_SameDist_d4_s1", seed=1, short=1),
+               _short(env, "EX_Paired_d1_n30_s0", short=2, n_exp=30)]
+    long_d0 = _d0(env)
+    long = ([_entry(env, "G2_Paired_d1_s0", short=20), _entry(env, "G1_Paired_d4_s0", short=20)], long_d0)
+    out, figs = env["tmp"] / "formal", env["tmp"] / "ffig"
+    out.mkdir()
+    figs.mkdir()
+    written = []
+    ctx = _ctx(env, out, figs, written, domain={a["image_id"]: a["domain"] for a in env["ann"]})
+    plan = ed.plan_formal("nocaps_like", ctx)
+    r = ed.formal_prompt("nocaps_like", entries, d0, base, ctx, long)
+    assert sorted(str(p) for p in plan["paths"]) == sorted(str(p) for p in [*out.iterdir(), *figs.iterdir()])
+    doc = json.load(open(out / "formal_nocaps_like.json"))
+    assert doc["exploratory"] is True and doc["gate_valid"] is False and doc["n_boot"] == KW["n_boot"] and doc["base"]["checkpoint_ids"] == ["base"]
+    keys = [(x["condition"], x["d"], x["n_exp"]) for x in doc["rows"]]
+    assert keys[:3] == [("Paired", 1, env["main_n"]), ("Paired", 4, env["main_n"]), ("Paired", 1, 30)]
+    assert [(c["d"], c["n_exp"], c["slots"]) for c in doc["contrasts"]] == [(1, env["main_n"], [0]), (4, env["main_n"], [0, 1])]
+    assert set(doc["contrasts"][1]["per_pair"]) == {"0", "1"}
+    sens = doc["contrasts_sensitivity"]
+    assert [(c["d"], c["a_slots"], c["b_slots"], c["seed_matched"]) for c in sens] == [(1, [0, 1], [0], False)]
+    assert doc["contrasts"][0]["unmatched"] == [1] and "SENSITIVITY" in sens[0]["label"]
+    labels = {x["condition"]: x["seen_specific_label"] for x in doc["rows"]}
+    assert "negative control" in labels["SameDist"] and labels["Paired"] == "seen-specific share"
+    assert all("memorisation" not in x["decomposition"].get("cider_all10", {}) for x in doc["rows"])
+    assert [x["d"] for x in doc["long_prompt"]["rows"]] == [1, 4] and set(doc["long_prompt"]["rows"][0]["n"]) == {"unseen"}
+    md = (out / "formal_nocaps_like.md").read_text()
+    assert "Paired − SameDist" in md and "seen-specific" in md and "negative control" in md and "base (untrained)" in md and "G1_Paired_d4_s1 |" in md
+    assert "‡ image-only CI" in md and "exceeds the total" in md and "SENSITIVITY: Paired s0,1 pooled vs SameDist s0" in md
+    assert "seed counts differ between conditions at d=1" in md
+    assert len(r["figures"]) == 4
+    with pytest.raises(SystemExit, match="refusing to overwrite"):
+        ed.formal_prompt("nocaps_like", entries, d0, base, ctx, long)
+    with pytest.raises(SystemExit, match="is prompt"):
+        ed.formal_prompt("nocaps_like", entries, long_d0, None, ctx)
