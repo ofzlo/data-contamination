@@ -28,7 +28,7 @@ set -uo pipefail
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 [ -n "${SLURM_SUBMIT_DIR:-}" ] && [ -f "$SLURM_SUBMIT_DIR/scripts/run_train.sh" ] && REPO=$SLURM_SUBMIT_DIR
 cd "$REPO"
-PY=${CONTAM_PY:-/scratch/$USER/envs/contam/bin/python}
+PY=${CONTAM_PY:-python}  # CONTAM_PY: interpreter of the contam env
 CKPT=${CONTAM_CKPT_DIR:-data/ckpt}  # paths.ckpt_dir
 SPECS=${RUN_SPECS:?set RUN_SPECS to the run spec paths}
 EXIT_PREEMPTED=75

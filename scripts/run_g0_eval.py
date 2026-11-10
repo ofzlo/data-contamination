@@ -30,7 +30,7 @@ log-probs cover every split image, which is all of NoCaps val, so they do not de
 
 Example:
     python scripts/run_g0_eval.py --split data/splits/split_A.json \
-        --run G0_d0_s0=/scratch/.../G0_d0_s0 ... --run G0_d0_s4=/scratch/.../G0_d0_s4 [--dry-run]
+        --run G0_d0_s0=data/ckpt/G0_d0_s0 ... --run G0_d0_s4=data/ckpt/G0_d0_s4 [--dry-run]
 """
 
 from __future__ import annotations

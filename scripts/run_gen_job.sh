@@ -25,7 +25,7 @@ set -uo pipefail
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 [ -n "${SLURM_SUBMIT_DIR:-}" ] && [ -f "$SLURM_SUBMIT_DIR/scripts/run_gen_job.sh" ] && REPO=$SLURM_SUBMIT_DIR
 cd "$REPO"
-PY=${CONTAM_PY:-/scratch/$USER/envs/contam/bin/python}
+PY=${CONTAM_PY:-python}  # CONTAM_PY: interpreter of the contam env
 SPLIT=${SPLIT:-data/splits/split_A.json}
 CKPT=${CONTAM_CKPT_DIR:-data/ckpt}
 : "${RUN_IDS:?set RUN_IDS, e.g. RUN_IDS=\"G1_Paired_d4_s0\"}"

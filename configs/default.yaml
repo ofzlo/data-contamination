@@ -3,7 +3,7 @@
 # Relative paths are resolved against the repository root.
 
 paths:
-  # Root for all large artifacts. On the cluster: export CONTAM_DATA_ROOT=/scratch/$USER/data-contamination/data
+  # Root for all large artifacts. e.g. export CONTAM_DATA_ROOT=/path/to/large/storage/data
   data_root: ${CONTAM_DATA_ROOT:-data}
   nocaps_parquet_dir: ${CONTAM_NOCAPS_PARQUET:-data/nocaps}
   annotations: ${CONTAM_DATA_ROOT:-data}/nocaps/annotations.json
@@ -12,7 +12,7 @@ paths:
   coco_captions: ${CONTAM_DATA_ROOT:-data}/coco/annotations/captions_train2017.json   # D4 SameDist source
   llava_mix: ${CONTAM_DATA_ROOT:-data}/llava/json/llava_v1_5_mix665k.json             # general instruction pool
   llava_images: ${CONTAM_DATA_ROOT:-data}/llava       # root of the 665K "image" paths (coco/, gqa/, ocr_vqa/, textvqa/, vg/)
-  ckpt_dir: ${CONTAM_CKPT_DIR:-data/ckpt}             # training outputs (adapters, resume checkpoints); data/ is on /scratch
+  ckpt_dir: ${CONTAM_CKPT_DIR:-data/ckpt}             # training outputs (adapters, resume checkpoints)
   outputs_dir: ${CONTAM_OUTPUTS:-outputs}
   spice_cache: ${CONTAM_OUTPUTS:-outputs}/cache/spice_cache.json
 
@@ -44,7 +44,7 @@ analysis:
   # B1 audit (docs/results/b1_audit.md): 20 NoCaps val images are the same photos as COCO train2017 /
   # Visual Genome images in LLaVA-1.5's training data. They stay in the frozen splits but are left
   # out of S / A / V group means; a robustness check reports the results with them.
-  exclude_image_ids_file: docs/results/b1_overlap_nocaps_image_ids.txt
+  exclude_image_ids_file: resources/b1/b1_overlap_nocaps_image_ids.txt
 
 exposure:
   # Shuffled condition: seed of the caption derangement over the exposed images (contam.data.exposure).

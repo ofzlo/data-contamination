@@ -233,3 +233,6 @@ __marimo__/
 cache/
 .pytest_cache/
 *.egg-info/
+
+# Internal notes, results write-ups and course documents (kept locally, not published)
+/docs/

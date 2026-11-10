@@ -14,7 +14,7 @@ same out dir (run lock, contam.train) it exits 76 without touching it. For SLURM
 
 Examples:
     python scripts/train_lora.py --run-spec outputs/runs/G0/G0_d0_s0.json
-    python scripts/train_lora.py --data sample.json --seed-slot 0 --run-id smoke --out-dir /scratch/.../smoke \
+    python scripts/train_lora.py --data sample.json --seed-slot 0 --run-id smoke --out-dir data/ckpt/smoke \
         --skip-manifest-check --allow-missing-images --max-steps 4
 """
 

@@ -27,7 +27,7 @@ set -uo pipefail
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 [ -n "${SLURM_SUBMIT_DIR:-}" ] && [ -f "$SLURM_SUBMIT_DIR/scripts/run_short_eval_job.sh" ] && REPO=$SLURM_SUBMIT_DIR
 cd "$REPO"
-PY=${CONTAM_PY:-/scratch/$USER/envs/contam/bin/python}
+PY=${CONTAM_PY:-python}  # CONTAM_PY: interpreter of the contam env
 SPLIT=${SPLIT:-data/splits/split_A.json}
 CKPT=${CONTAM_CKPT_DIR:-data/ckpt}
 PROMPT_ID=${PROMPT_ID:-nocaps_like}

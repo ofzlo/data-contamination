@@ -10,7 +10,7 @@ Summaries and paired changes leave out the B1 analysis exclusion (as the G0 base
 
 Example:
     python scripts/b3_prompt_intervention.py generate --split data/splits/split_A.json \
-        --model-tag base --model-tag d0_s0=/scratch/.../d0_s0
+        --model-tag base --model-tag d0_s0=data/ckpt/d0_s0
     python scripts/b3_prompt_intervention.py evaluate --split data/splits/split_A.json \
         --model-tag base --model-tag d0_s0
 """

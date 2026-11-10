@@ -1,192 +1,184 @@
 # Style Before Memory
 
-**When Benchmark Exposure Starts to Inflate VLM Scores**
+**When does benchmark exposure start to inflate VLM scores?**
 
-A controlled study of benchmark contamination in vision-language models (VLMs). We fine-tune VLMs on NoCaps evaluation items at controlled exposure levels and ask whether the resulting score gains come from *style adaptation* (writing in the benchmark's caption style) or *reference memorization* (reproducing the specific training caption), and whether existing contamination detectors can tell the two apart.
+A controlled study of benchmark contamination in vision-language models (VLMs). We fine-tune
+LLaVA-1.5-7B (LoRA) on NoCaps validation items at controlled exposure levels and separate two
+effects that both raise caption scores:
 
-> Status: planning / pilot (W1, week of Oct 19, 2026). Target venue: ICML 2027. Started as a CSE 576 course project.
+- **Style adaptation:** the model starts writing in the benchmark's short, one-sentence caption
+  register, on *every* image, including images it never saw.
+- **Reference memorization:** the model reproduces the specific training caption of an exposed
+  image.
 
-## Hypothesis
+The hypothesis is that style follows the total number of exposed captions (K), while memory
+follows per-item repetition (d), so style should appear at a lower exposure level than memory.
 
-Benchmark captions share a short, single-sentence register that differs from the long paragraphs instruction-tuned VLMs write by default. Every exposed caption reinforces that style, while a given image–caption link is reinforced only when that item repeats. We therefore expect:
+## Main findings (split A)
 
-- **Low exposure** → style adaptation: benchmark-style captions on *every* image, including unseen ones. CIDEr rises without any reference being memorized.
-- **High exposure** → reference memorization: the training caption reproduced verbatim on seen images.
+| Question | Result |
+|---|---|
+| Does style appear before memory? | **Yes.** At d=1 caption length drops by ~73 words (saturated) while the latent-memory signal (ΔRMI) stays below its margin. |
+| When does latent memory appear? | **d=2**: ΔRMI above the preregistered margin δ_V. |
+| When does verbatim memory appear? | **d=4**: exact match on seen images goes from 3.5% (d=2) to 83% (d=4) and 99.95% (d=64). |
+| Can style appear without any memory? | **Yes.** The same-distribution control (COCO captions) gives the same style shift as Paired exposure, with no memory up to d=64. |
+| With format-matched (short) prompts, is there a real unseen gain? | **Small.** Unseen CIDEr rises by +6.0 at Paired d=1 (vs. +114 under the long default prompt, which is mostly the length penalty). |
 
-Headline claim to test: **style follows the total number of exposed captions (K), memory follows per-item repetition (d).**
+Only the G1 gate verdict follows the preregistered rule; the dose / K-sweep and short-prompt
+analyses are exploratory.
 
-## Research questions
+## Design
 
-| RQ | Question |
-|----|----------|
-| RQ1 | Does style adaptation appear at a lower exposure level than reference memorization? |
-| RQ2 | Which part of exposure (image, caption, pairing, breadth vs. depth, reference variety) causes which effect? |
-| RQ3 | Is the score gain real quality, or inflation from style? |
-| RQ4 | Do detectors (DCQ, CDD, KDS) catch exposure, memorization, or inflation? |
+- **Benchmark:** NoCaps validation (4,500 images, 10 references each). Half of the images form
+  the exposure pool (stratified by in- / near- / out-of-domain); each exposed image has 1
+  training reference and 9 held-out references. Two splits: A (explore) and B (confirm).
+- **Model:** `llava-hf/llava-1.5-7b-hf` with LoRA on the language model and projector (vision
+  encoder frozen). Replication model: SmolVLM.
+- **Exposure:** N_exp = 1,000 exposed images, each repeated d ∈ {0, 1, 2, 4, 16, 64} times. The
+  K = N_exp × d exposed examples *replace* general LLaVA-665K examples, so every run trains on the
+  same total M = 130,000 examples.
+- **Conditions:** Paired (image + its reference caption), Caption (caption only, text-only),
+  Image (image + the base model's own caption), Shuffled, and SameDist (COCO images / captions
+  matched in count and length). The d=0 baseline uses 5 training seeds.
+- **Metrics:**
 
-## Setup
+  | Part | Measures | Metrics |
+  |---|---|---|
+  | S: style | style change on unseen images | caption length, boilerplate rate |
+  | A: association | gain specific to seen images | Δ (seen − unseen gain vs. d=0), Γ (paired beyond unimodal) |
+  | V: verbatim memory | reproduction of the training reference | ΔRMI, rank among 10 refs, exact match, longest shared n-gram |
+  | Q: quality | whether captions really improved | CIDEr-D, SPICE (held-out and all-10 references) |
 
-- **Benchmark:** NoCaps validation (4,500 images, 10 human references each). Half of the images are exposed (stratified by in-/near-/out-of-domain); for each exposed image, 1 reference is used for training and 9 are held out for scoring. A class-disjoint split tests vocabulary transfer.
-- **Model:** LLaVA-1.5-7B with LoRA on the language model + projector (vision encoder frozen). Fallback/replication: SmolVLM-2.2B or Molmo-7B-O, chosen after a training-data audit.
-- **Exposure grid:** repetition d ∈ {0, 1, 4, 16, 64}, under four conditions:
-  - **Image:** benchmark image with a non-reference target (the base model's own caption)
-  - **Caption:** reference caption in a text-only example
-  - **Shuffled:** images and captions both exposed, captions permuted across images
-  - **Paired:** image with its training reference under the captioning prompt
-- **Controls:** a shared d=0 baseline, plus a same-distribution control (COCO captions matched in count and length). Exposed examples replace general instruction examples, so the total example budget M stays fixed.
+  Contamination detectors (DCQ, CDD, KDS) are evaluated as seen-vs-unseen classifiers.
+- **Data audit (B1):** 20 NoCaps val images are also in LLaVA's training data (COCO / Visual
+  Genome). They are excluded from group statistics and from the SameDist and general pools; the
+  ID lists are in [`resources/b1/`](resources/b1/).
 
-## Metrics
-
-Every checkpoint is scored on four components:
-
-| Part | What it measures | Key metrics |
-|------|------------------|-------------|
-| **S** — style | Style change on unseen images | Caption length, boilerplate rate, style classifier |
-| **A** — item association | Gain specific to seen items | Δ<sub>d,c</sub> (seen − unseen gain vs. d=0), Γ<sub>d</sub> (paired gain beyond unimodal gains) |
-| **V** — verbatim memory | Reproduction of the training reference | ΔRMI, rank of the training ref among 10, exact match, longest shared n-gram |
-| **Q** — real quality | Whether captions actually improved | CIDEr, SPICE, CIDEr on style-counterfactual refs, CLIPScore, LLM judge, human pairwise |
-
-Detectors: DCQ and CDD (AUROC for separating seen from unseen images), KDS (dataset-level). False positives are measured on the d=0 and same-distribution controls.
-
-## Experiment plan
-
-The plan has three tracks:
-
-- **Track A — gates (G0–G4):** run in order, each with a preregistered pass rule and fallback.
-  - G0: pipeline and noise check
-  - G1: pilot (W4, go/no-go for ICML)
-  - G2: locate τ<sub>style</sub> and τ<sub>memory</sub> (W6)
-  - G3: replication on a fresh split
-  - G4: quality vs. inflation
-- **Track B — independent work (B1–B8):** data audit, style-counterfactual references, prompt interventions, style metrics, metric sensitivity, detectors, replication-model port, related work.
-- **Track C — extensions (C1–C11):** modality/pairing, breadth vs. depth at fixed K (core RQ1 evidence), wording vs. meaning, dilution, realistic contamination inside LLaVA-665K, update scope, class transfer, a second model, a detector analysis, a second task, a third model.
-
-Pass rules and decision margins are fixed in `prereg.md` before results come in. Thresholds are chosen on split A and confirmed on split B.
-
-See [`docs/`](docs/) for the full proposal and experiment plan.
-
-## Team
-
-| Member | Role |
-|--------|------|
-| Minho Chung | Training runs, go/no-go calls; since 2026-10-26 also model choice, condition formats and detectors |
-| Yoorhim Cho | Evaluation, metrics, gate verdicts |
-| Kaustav Chanda | Model choice, condition formats, detectors (reassigned to Minho on 2026-10-26) |
-| Injoh Tanwani | Reference sets, metric sensitivity, paper support |
-
-Who does what, week by week: [`docs/task-allocation.md`](docs/task-allocation.md).
+Decision margins, gate pass rules and every protocol detail are fixed in
+[`prereg.md`](prereg.md).
 
 ## Repository layout
 
 ```
-docs/
-  CSE576_Project.pdf      # project proposal
-  experiment-plan.pdf     # detailed experiment plan (gates, tracks, timeline)
-prereg.md                 # preregistration draft (D5 margins, pass rules)
-configs/                  # default.yaml (paths, seeds, margins, boilerplate), prompts.yaml
-src/contam/               # data/ (prep, splits), eval/ (S, A, V, Q, stats), models.py, generate.py
-scripts/                  # CLIs below
-tests/                    # pytest, no GPU needed
+configs/      default.yaml (paths, seeds, margins, training), prompts.yaml (captioning prompts)
+manifests/    MANIFEST.lock.json: sha256 of every frozen split / pool file (checked before each run)
+resources/    B1 overlap and exclusion ID lists
+src/contam/   data/ (NoCaps prep, splits, exposure), eval/ (S/A/V/Q, stats, gates, detectors),
+              models.py, generate.py, train.py
+scripts/      CLIs for every step below; analysis/ holds the exploratory analyses
+tests/        pytest suite (no GPU needed; GPU / Java tests are marked)
+prereg.md     preregistration: definitions, margins, pass rules
 ```
 
-## D2 timing run (Minho)
+## Reproducing
 
-Decision memo of 2026-10-23: M = 130k (provisional), N_exp = 1,000, d ∈ {0, 1, 4, 16, 64}. Time two
-cells, general only (d=0) and d=64, three repeats each, at least 1,000 optimizer steps per repeat.
-Everything below runs inside one A100 session (1 GPU, `-c 4`, 40G, 8 h) from the repository root.
+### Requirements
+
+- Python ≥ 3.10, a CUDA GPU for training and generation (runs were done on one A100 80GB;
+  ~11.6 GPU-h per d=0 run at M = 130k), and Java (for the PTB tokenizer and SPICE).
+- Disk: ~4 GB for NoCaps, the LLaVA-665K json and COCO captions, plus ~100 GB for the
+  LLaVA-665K images used in training.
+
+### 1. Environment
 
 ```bash
-conda activate /scratch/$USER/envs/contam
-export CONTAM_DATA_ROOT=/scratch/$USER/data-contamination/data
-# once: the exposed NoCaps images must sit under the 665K image root, as nocaps/<file>
-ln -sfn $CONTAM_DATA_ROOT/nocaps/images $CONTAM_DATA_ROOT/llava/nocaps
-
-# general only (d=0): repeat r = 0, 1, 2 (seed slot r -> its own data order and run dir)
-python scripts/timing_run.py --n 128000 --steps 1000 --repeat 0
-# d=64: Paired, split A, K = 1,000 x 64 = 64,000 of M = 130,000 (49%) replace the sample's tail
-python scripts/timing_run.py --n 128000 --steps 1000 --exposure-d 64 --n-exp 1000 --M 130000 --repeat 0
+git clone https://github.com/ofzlo/data-contamination.git && cd data-contamination
+pip install -e ".[models,data,test]"
+pytest -q                         # CPU-only unit tests
 ```
 
-- `--n` must be at least steps x 128, so 128,000. The first call per cell builds the sample (it checks
-  every image once); the repeats reuse it.
-- At the expected 45–60 s per step, one 1,000-step repeat (about one full M = 130k run, which is 1,016
-  steps) takes 13–17 GPU-h, so it spans two or three sessions. When a session ends, rerun the same
-  command in the next one: it resumes from the trainer's checkpoint (every 20 steps, so at most 20
-  steps are lost), and the steady state skips the first 5 steps of each session again.
-- A 40G A100 may not fit micro-batch 16 (36.8 GiB worst case on the 80 GB card); the probe then falls
-  back to 8 or 4 by itself, and the report says which one ran.
-- Order: d=0 r0, d=64 r0, then r1 and r2 of both, so a usable comparison exists after two runs.
-
-Recording. Each finished repeat writes `outputs/timing/timing_report_<tag>.{json,txt}` (GPU, micro-batch,
-steady-state examples/s, s/step, peak memory, GPU-h projections). When all six are done:
+All large files live under `$CONTAM_DATA_ROOT` (default `./data`); outputs go to `./outputs`
+and checkpoints to `$CONTAM_CKPT_DIR` (default `data/ckpt`). None of these are tracked by git.
 
 ```bash
-python scripts/d2_summary.py --M 130000 --out docs/results/d2_timing.md   # mean ± SD per cell across repeats
+export CONTAM_DATA_ROOT=/path/to/storage/data   # optional
+export CONTAM_CKPT_DIR=/path/to/storage/ckpt    # optional
+export CONTAM_PY=$(which python)                # interpreter used by the SLURM job scripts
 ```
 
-Commit `docs/results/d2_timing.md` with the six `.txt` reports appended, and fill the D2 row of
-`prereg.md` with M, N_exp, the measured GPU-h per run and the date.
+### 2. Data and frozen manifests
 
-## Evaluation pipeline
-
-Setup (cluster):
+`scripts/setup.sh` creates a conda env (`$CONTAM_ENV`, default `./env`), downloads NoCaps val
+(`lmms-lab/NoCaps`), the NoCaps domain labels, `llava_v1_5_mix665k.json` and the COCO 2017
+captions, then rebuilds every manifest and checks it against `manifests/MANIFEST.lock.json`
+byte for byte:
 
 ```bash
-conda activate /scratch/$USER/envs/contam && pip install -e .
-export CONTAM_DATA_ROOT=/scratch/$USER/data-contamination/data   # or symlink ./data there
-pytest -q
+bash scripts/setup.sh
 ```
 
-Data, outputs and checkpoints stay out of git (`data/`, `outputs/` are gitignored).
+If you manage the environment yourself, the data steps are:
 
 ```bash
-# 1. NoCaps val parquet -> annotations.json + images (domain labels from a separate table)
 python scripts/prep_nocaps.py --domains $CONTAM_DATA_ROOT/nocaps/domain_source/nocaps_val_domains.parquet
-# 2. Splits A (explore) and B (confirm)
-python scripts/make_splits.py
-# 2b. SameDist control (D4), general-pool order, then freeze before G0 (D7)
-python scripts/make_samedist.py                 # COCO train2017 captions -> samedist_{A,B}.json
-python scripts/general_pool.py                  # LLaVA-665K -> general_order.jsonl (add B1 exclusions first)
-python scripts/freeze_manifests.py              # manifests/MANIFEST.lock.json (tracked); --check before every run
-python scripts/build_g0.py --M <M>              # G0 run specs (d=0 x 5 seeds + base); needs M from D2
-# 3. Per checkpoint: T=0 captions, teacher-forced ref log-probs, metrics
-python -m contam.generate --checkpoint-id d0_s0 --adapter CKPT --split data/splits/split_A.json --out outputs/gens/d0_s0.jsonl
-python scripts/score_refs.py --checkpoint-id d0_s0 --adapter CKPT --split data/splits/split_A.json --out outputs/logprobs/d0_s0.jsonl
-python scripts/evaluate_checkpoint.py --checkpoint-id d0_s0 --generations outputs/gens/d0_s0.jsonl \
-    --logprobs outputs/logprobs/d0_s0.jsonl --split data/splits/split_A.json --out outputs/metrics/d0_s0.json
-#    (add --baseline outputs/metrics/d0_s*.json for paired S / Δ / ΔRMI vs. d=0)
-#    Every eval CLI refuses a split that is not byte-identical to its manifests/MANIFEST.lock.json entry
-#    and records that entry's sha256 (--skip-manifest-check: smoke tests only, output not gate-valid).
-#    Group means, Δ, margins and gates leave out the 20 B1 overlap images (all are still scored); every
-#    output records `analysis_exclusion`; --include-b1-overlap gives the robustness view (not gate-valid).
-#    "seen" is the N_exp = 1,000 exposure set (exposure.n_exp, --n-exp; recorded as `seen_definition`, prereg Section 2);
-#    seen_unexposed (the other 1,250 of the 50% set) is reported only. --reuse-scores regroups old metrics without re-scoring.
-#    G0 chain for the five d=0 checkpoints (steps 3 and 4, pipelined, resumable; --dry-run to preview):
-python scripts/run_g0_eval.py --split data/splits/split_A.json --run G0_d0_s0=CKPT0 ... --run G0_d0_s4=CKPT4
-# 4. G0 margins, G1 report, B3 prompt intervention
-python scripts/compute_margins.py --d0 outputs/metrics/d0_s*.json --base outputs/metrics/base.json --out outputs/margins_A.json
-python scripts/gate_report.py --manifest g1_manifest.yaml --out outputs/g1_report.json
-python scripts/g2_report.py --split data/splits/split_A.json --margins outputs/margins_A.json --g1-report outputs/g1_report.json \
-    --baseline outputs/metrics/d0_s*.json --checkpoints outputs/metrics/{caption,paired,samedist}_d*_s*.json --out outputs/g2_report_A.json
-python scripts/sim_g1b_null.py   # G1(b) false-PASS rate under no effect (prereg.md, Section 6)
-python scripts/b3_prompt_intervention.py {generate,evaluate} --split data/splits/split_A.json --model-tag base --model-tag d0_s0=CKPT
+python scripts/make_splits.py                                                       # splits A and B
+python scripts/make_samedist.py --exclude-coco-ids resources/b1/b1_exclude_coco_ids.txt
+python scripts/general_pool.py --exclude-images resources/b1/b1_exclude_665k_images.txt
+python scripts/freeze_manifests.py --check                                          # must pass
 ```
 
-Use `python -m contam.generate --temperature 1` to get T=1 samples. Definitions and pass rules are in `prereg.md`.
+Training also needs the LLaVA-665K images under `$CONTAM_DATA_ROOT/llava/{coco,gqa,ocr_vqa,textvqa,vg}`
+(see the [LLaVA repository](https://github.com/haotian-liu/LLaVA) for download instructions).
 
-B6 detectors (Minho; protocol in prereg Section 7, settings under `detectors` in `configs/default.yaml`):
+### 3. Training
+
+Run specs are built first, then trained with a resumable runner (works interactively or under
+SLURM; adjust the `#SBATCH` lines to your cluster).
 
 ```bash
-# CDD (CPU): T=0 captions + 20 T=1 samples per image of the same checkpoint
-python -m contam.generate --checkpoint-id G0_d0_s0 --adapter CKPT --split data/splits/split_A.json --temperature 1 --out outputs/gens/G0_d0_s0_t1.jsonl
-python scripts/run_detectors.py cdd --split data/splits/split_A.json --checkpoint-id G0_d0_s0 \
-    --greedy outputs/gens/G0_d0_s0.jsonl --samples outputs/gens/G0_d0_s0_t1.jsonl --out outputs/detectors/cdd_G0_d0_s0.json
-# DCQ (GPU): word-level perturbations once per split, then the quizzes per checkpoint
-python scripts/dcq_perturb.py --split data/splits/split_A.json --out outputs/detectors/dcq_perturbations_A.jsonl
-python scripts/run_detectors.py dcq --split data/splits/split_A.json --checkpoint-id G0_d0_s0 --adapter CKPT \
-    --perturbations outputs/detectors/dcq_perturbations_A.jsonl --out outputs/detectors/dcq_G0_d0_s0.json
-# KDS (GPU): embeddings before / after a short LoRA fine-tune on the seen and on the unseen subset
-python scripts/run_detectors.py kds --split data/splits/split_A.json --checkpoint-id G0_d0_s0 --adapter CKPT --out outputs/detectors/kds_G0_d0_s0.json
-# base + five d=0 seeds: per-checkpoint AUROC and the d=0 spread (null band)
-python scripts/run_detectors.py report --inputs outputs/detectors/*.json --d0-prefix G0_d0 --out outputs/detectors/b6_report.json
+# d=0 baseline: 5 seeds + the untrained base (eval only)
+python scripts/build_g0.py --M 130000
+bash scripts/run_g0_train.sh                 # or: sbatch scripts/run_g0_train.sh
+
+# exposed cells, e.g. d=4 for three conditions, seed slot 0
+python scripts/build_g1.py --M 130000 --n-exp 1000 --conditions Caption Paired SameDist \
+    --doses 4 --slots 0 --link-nocaps
+RUN_SPECS="outputs/runs/G1/G1_Paired_d4_s0.json" bash scripts/run_train.sh
 ```
+
+`--exploratory` in `build_g1.py` allows doses outside the preregistered grid (e.g. d=2) and other
+N_exp values (K sweep).
+
+### 4. Evaluation
+
+Per checkpoint: T=0 captions under the captioning prompt, teacher-forced log-probabilities of
+all 10 references, then S/A/V/Q metrics.
+
+```bash
+CKPT=$CONTAM_CKPT_DIR/G1_Paired_d4_s0
+SPLIT=data/splits/split_A.json
+python -m contam.generate --checkpoint-id G1_Paired_d4_s0 --adapter $CKPT --split $SPLIT --out outputs/gens/G1_Paired_d4_s0.jsonl
+python scripts/score_refs.py --checkpoint-id G1_Paired_d4_s0 --adapter $CKPT --split $SPLIT --out outputs/logprobs/G1_Paired_d4_s0.jsonl
+python scripts/evaluate_checkpoint.py --checkpoint-id G1_Paired_d4_s0 --split $SPLIT \
+    --generations outputs/gens/G1_Paired_d4_s0.jsonl --logprobs outputs/logprobs/G1_Paired_d4_s0.jsonl \
+    --baseline outputs/metrics/G0_d0_s*.json --out outputs/metrics/G1_Paired_d4_s0.json
+```
+
+Batch versions: `scripts/run_g0_eval.py` (whole d=0 chain plus margins), `scripts/run_gen_job.sh`
+(GPU stages for a list of `RUN_IDS`), and `scripts/run_short_eval_job.sh` (format-matched
+short-prompt evaluation). Every evaluation CLI refuses a split that does not match its entry in
+`manifests/MANIFEST.lock.json`.
+
+### 5. Gates and analyses
+
+```bash
+python scripts/compute_margins.py --d0 outputs/metrics/G0_d0_s*.json --base outputs/metrics/G0_base.json --out outputs/margins_A.json
+python scripts/gate_report.py --manifest g1_manifest.yaml --out outputs/g1_report.json
+python scripts/g2_report.py --split $SPLIT --margins outputs/margins_A.json --g1-report outputs/g1_report.json \
+    --baseline outputs/metrics/G0_d0_s*.json --checkpoints outputs/metrics/G*_d*_s*.json --out outputs/g2_report_A.json
+
+# exploratory dose / K-sweep analysis and figures
+python scripts/analysis/explore_dose.py --split $SPLIT --tag my_run --checkpoints outputs/metrics/G*_d*_s*.json
+
+# contamination detectors (CDD, DCQ, KDS) and their report
+python scripts/run_detectors.py {cdd,dcq,kds,report} --help
+```
+
+Null simulations for the gate rules: `scripts/sim_g1b_null.py`, `scripts/sim_g2_null.py`.
+
+## Configuration
+
+`configs/default.yaml` holds paths (expanded from environment variables such as
+`CONTAM_DATA_ROOT`), model IDs, generation and training settings, split seeds, and the
+preregistered margins. `configs/prompts.yaml` holds the captioning prompt `p_cap` and the
+alternative prompts used in the prompt-intervention and short-prompt analyses.

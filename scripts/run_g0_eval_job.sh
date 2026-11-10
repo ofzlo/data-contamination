@@ -21,7 +21,7 @@ set -uo pipefail
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 [ -n "${SLURM_SUBMIT_DIR:-}" ] && [ -f "$SLURM_SUBMIT_DIR/scripts/run_g0_eval_job.sh" ] && REPO=$SLURM_SUBMIT_DIR
 cd "$REPO"
-PY=${CONTAM_PY:-/scratch/$USER/envs/contam/bin/python}
+PY=${CONTAM_PY:-python}  # CONTAM_PY: interpreter of the contam env
 SPLIT=data/splits/split_A.json
 CKPT=${CONTAM_CKPT_DIR:-data/ckpt}
 stamp() { echo "[$(date '+%F %T')] $*"; }

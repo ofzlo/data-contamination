@@ -65,7 +65,7 @@ proposal (`docs/CSE576_Project.pdf`): eq. 1 generation, eq. 2 group score, eq. 3
     with its sources interleaved, so every prefix keeps the 665K source mix. A run with K exposed
     examples trains on the first M − K general examples plus the K exposed ones; d=0 trains on the
     first M. B1 exclusions are applied before this order is frozen: the 38 examples on the 21 665K
-    images that are NoCaps val photos (`docs/results/b1_exclude_665k_images.txt`) are dropped, leaving
+    images that are NoCaps val photos (`resources/b1/b1_exclude_665k_images.txt`) are dropped, leaving
     665,260. Frozen 2026-10-25, order sha256 `c43f390de60f…`.
 - **SameDist (D4).** `contam.data.samedist`: one COCO train2017 caption per seen image, with the
   same word count as that image's training reference (`contam.eval.style.words`). Each COCO image
@@ -74,12 +74,12 @@ proposal (`docs/CSE576_Project.pdf`): eq. 1 generation, eq. 2 group score, eq. 3
   exposure sets, and the run builder repeats each row d times, so K matches. All 2,250 rows of both
   splits match length exactly, and the total word count equals that of the training references.
   Rebuilt 2026-10-25 without the 13 COCO train2017 images that are NoCaps val photos (B1;
-  `--exclude-coco-ids docs/results/b1_exclude_coco_ids.txt`): 106 rows of A and 109 of B changed,
+  `--exclude-coco-ids resources/b1/b1_exclude_coco_ids.txt`): 106 rows of A and 109 of B changed,
   still 2,250 / 2,250 exact. Hashes: SameDist A `a13ef0c474da…`, SameDist B `33ddd7ae36e0…`
   (the first frozen versions, `3c8c96c1e9bc…` / `5b386c7cfbf7…`, held one such image; nothing had
   trained on them). The lock records the unfreeze under `amendments`.
 - **B1 analysis exclusion.** 20 NoCaps val images are the same Flickr photos as COCO train2017 or
-  Visual Genome images that LLaVA-1.5 trained on (`docs/results/b1_overlap_nocaps_image_ids.txt`;
+  Visual Genome images that LLaVA-1.5 trained on (`resources/b1/b1_overlap_nocaps_image_ids.txt`;
   9 seen in split A, 8 in split B, none in the shared 3.125% set). They stay in the frozen splits and
   are scored, but S / A / V group means and gate decisions leave them out
   (`analysis.exclude_image_ids_file`); a robustness check reports every result with them.

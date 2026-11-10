@@ -7,7 +7,7 @@ contam.eval.evaluate.prepare_logprob_resume). Uses the same prompt template as g
 (contam.models.HFVLM).
 
 Example:
-    python scripts/score_refs.py --checkpoint-id d0_s0 --adapter /scratch/.../d0_s0 \
+    python scripts/score_refs.py --checkpoint-id d0_s0 --adapter data/ckpt/d0_s0 \
         --split data/splits/split_A.json --out outputs/logprobs/d0_s0.jsonl
 """
 

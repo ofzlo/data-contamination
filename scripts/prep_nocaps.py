@@ -3,8 +3,8 @@
 
 Example:
     python scripts/prep_nocaps.py \
-        --parquet-dir /scratch/$USER/data-contamination/data/nocaps \
-        --domains /scratch/$USER/data-contamination/data/nocaps/domain_source/nocaps_val_domains.parquet
+        --parquet-dir $CONTAM_DATA_ROOT/nocaps \
+        --domains $CONTAM_DATA_ROOT/nocaps/domain_source/nocaps_val_domains.parquet
 """
 
 from __future__ import annotations

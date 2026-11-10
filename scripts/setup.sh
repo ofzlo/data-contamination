@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# One-time setup on ASU Sol: conda env, W1 data, and the frozen manifests (checked against
-# manifests/MANIFEST.lock.json). Run from the repository root, cloned at /scratch/$USER/data-contamination:
+# One-time setup (conda/mamba, optionally via `module load` on a cluster): conda env, data, and the
+# frozen manifests (checked against manifests/MANIFEST.lock.json). Run from the repository root.
+# Locations: CONTAM_ENV (conda prefix), CONTAM_DATA_ROOT (data), HF_HOME (Hugging Face cache).
 #
-#   bash scripts/sol_setup.sh
+#   bash scripts/setup.sh
 #
 # Rerunning skips what is already there. Downloads ~4 GB (NoCaps val parquet with images, the
 # pt-br domain table, LLaVA-665K json, COCO 2017 captions). The 665K *images* (~100 GB) are not
@@ -10,15 +11,16 @@
 set -euo pipefail
 
 REPO=$(cd "$(dirname "$0")/.." && pwd)
-ENV=${CONTAM_ENV:-/scratch/$USER/envs/contam}
+ENV=${CONTAM_ENV:-$REPO/env}
 export CONTAM_DATA_ROOT=${CONTAM_DATA_ROOT:-$REPO/data}
-export HF_HOME=${HF_HOME:-/scratch/$USER/hf}
+export HF_HOME=${HF_HOME:-$HOME/.cache/huggingface}
 DATA=$CONTAM_DATA_ROOT
 cd "$REPO"
 echo "repo $REPO | env $ENV | data $DATA"
 
 # 1. environment
-module load mamba/latest
+if command -v module >/dev/null 2>&1; then module load mamba/latest 2>/dev/null || true; fi
+command -v mamba >/dev/null 2>&1 || mamba() { conda "$@"; }
 if [ ! -d "$ENV" ]; then
   mamba create -y -p "$ENV" python=3.11
 fi
@@ -59,13 +61,13 @@ fi
 # 3. NoCaps annotations + images, then every frozen manifest (must reproduce the lock byte for byte)
 [ -f "$DATA/nocaps/annotations.json" ] || python scripts/prep_nocaps.py --domains "$DATA/nocaps/domain_source/nocaps_val_domains.parquet"
 python scripts/make_splits.py
-python scripts/make_samedist.py --exclude-coco-ids docs/results/b1_exclude_coco_ids.txt
-python scripts/general_pool.py --exclude-images docs/results/b1_exclude_665k_images.txt
+python scripts/make_samedist.py --exclude-coco-ids resources/b1/b1_exclude_coco_ids.txt
+python scripts/general_pool.py --exclude-images resources/b1/b1_exclude_665k_images.txt
 python scripts/freeze_manifests.py --check
 
 cat <<EOF
 
 Done. In a new shell:
-  module load mamba/latest && source activate $ENV
+  source activate $ENV   # or: conda activate $ENV
   export CONTAM_DATA_ROOT=$DATA HF_HOME=$HF_HOME
 EOF

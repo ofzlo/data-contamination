@@ -28,7 +28,7 @@ def _rec(m, excl):
 def test_load_analysis_exclusion_default_config():
     e = load_analysis_exclusion(load_config())
     assert len(e["image_ids"]) == 20 and e["applied"] is True and 82 in e["image_ids"]
-    assert e["sha256"] == file_sha256(REPO_ROOT / "docs/results/b1_overlap_nocaps_image_ids.txt")
+    assert e["sha256"] == file_sha256(REPO_ROOT / "resources/b1/b1_overlap_nocaps_image_ids.txt")
     assert load_analysis_exclusion(load_config(), include=True) == dict(e, applied=False)
 
 

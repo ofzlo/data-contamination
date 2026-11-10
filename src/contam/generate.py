@@ -19,7 +19,7 @@ file), so one file never mixes runs.
   ``t1_base_seed + image_id``, so each image's samples are reproducible regardless of resumption.
 
 Example:
-    python -m contam.generate --checkpoint-id d0_s0 --adapter /scratch/.../d0_s0 \
+    python -m contam.generate --checkpoint-id d0_s0 --adapter data/ckpt/d0_s0 \
         --split data/splits/split_A.json --out outputs/gens/d0_s0.jsonl --temperature 0
 """
 
