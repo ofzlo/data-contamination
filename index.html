@@ -98,11 +98,15 @@ mark { background: var(--memory-wash); color: var(--memory); border-radius: 3px;
 .k { font: 500 0.7rem/1.2 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
 .answer { font-size: 0.95rem; border-left: 3px solid var(--memory); padding-left: 10px; display: grid; gap: 4px; }
 .answer .k { color: var(--memory); }
-.stack { position: relative; min-height: 210px; }
-.ex { position: absolute; left: 0; right: 0; background: var(--sheet); border: 1px solid var(--rule); border-radius: 10px; padding: 10px 12px; display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 10px; font: 400 0.76rem/1.45 var(--mono); box-shadow: 0 6px 18px -12px rgba(20, 32, 43, 0.5); transition: transform 0.35s ease, opacity 0.35s ease; }
-.ex img { width: 56px; height: 56px; border-radius: 6px; aspect-ratio: auto; }
-.ex .u { color: var(--ink-3); }
-.ex .a { color: var(--memory); }
+.tex { position: relative; background: var(--sheet); border: 1px solid var(--rule); border-radius: 12px; padding: 14px; display: grid; gap: 10px; }
+.tex .cnt { position: absolute; right: -8px; top: -10px; font: 700 1rem/1 var(--display); color: var(--sheet); background: var(--memory); border-radius: 999px; padding: 7px 11px; font-variant-numeric: tabular-nums; }
+.msg { display: grid; gap: 4px; }
+.msg.u { grid-template-columns: 44px minmax(0, 1fr); column-gap: 10px; align-items: center; }
+.msg.u img { width: 44px; height: 44px; border-radius: 6px; aspect-ratio: auto; grid-row: span 2; }
+.msg.u p { font-size: 0.88rem; color: var(--ink-2); }
+.msg.a { background: var(--memory-wash); border-radius: 10px; padding: 10px 12px; }
+.msg.a .k { color: var(--memory); }
+.msg.a p { font-size: 1rem; line-height: 1.45; color: var(--ink); font-weight: 500; }
 .empty { border: 1.5px dashed var(--rule); border-radius: 10px; padding: 18px; color: var(--ink-3); font-size: 0.9rem; text-align: center; min-height: 140px; display: grid; place-items: center; }
 .count { font: 700 2rem/1 var(--display); color: var(--memory); font-variant-numeric: tabular-nums; }
 .mix { font-size: 0.82rem; color: var(--ink-2); }
@@ -369,10 +373,15 @@ footer .wrap { display: grid; gap: 8px; }
     if (!n) {
       st.innerHTML = `<div class="empty">Not leaked.<br>This model only saw ordinary training data.</div>`;
     } else {
-      const shown = Math.min(n, 5), card = `<img src="${s.img}" alt=""><div><span class="u">USER: Describe the image in detail.</span><br><span class="a">ASSISTANT: ${esc(s.train_ref)}</span></div>`;
-      let h = `<div class="stack" style="min-height:${118 + (shown - 1) * 14}px">`;
-      for (let i = shown - 1; i >= 0; i--) h += `<div class="ex" style="top:${i * 14}px;transform:scale(${1 - i * 0.03});opacity:${1 - i * 0.14};z-index:${10 - i}">${card}</div>`;
-      st.innerHTML = h + `</div><p><span class="count">${n}×</span></p>`;
+      // copies behind the card: one offset layer per repeat, up to 4 layers
+      const layers = Math.min(n, 5) - 1;
+      const shadow = Array.from({ length: layers }, (_, k) => { const y = (k + 1) * 7, sp = (k + 1) * 4; return `0 ${y}px 0 -${sp}px var(--sheet), 0 ${y}px 0 -${sp - 1}px var(--rule)`; }).join(", ");
+      st.innerHTML = `<div class="tex" style="${shadow ? `box-shadow:${shadow};` : ""}margin-bottom:${layers * 7}px">
+        <span class="cnt">${n}×</span>
+        <span class="k">One training example</span>
+        <div class="msg u"><img src="${s.img}" alt=""><span class="k">User</span><p>Describe the image in detail.</p></div>
+        <div class="msg a"><span class="k">Assistant: the leaked answer</span><p>${esc(s.train_ref)}</p></div>
+      </div>`;
     }
     $("#p-mix").textContent = n ? `This exact example appears ${n} time${n > 1 ? "s" : ""}, mixed into 130,000 ordinary training examples.` : "The model is still fine-tuned on the same 130,000 ordinary examples.";
     const c = cap(s, REPS.find(([r]) => r === heroRep)[1]);
