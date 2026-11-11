@@ -136,6 +136,13 @@ mark { background: var(--memory-wash); color: var(--memory); border-radius: 3px;
 .row .side { display: grid; gap: 8px; justify-items: start; }
 .row .wc { font: 400 0.75rem/1 var(--mono); color: var(--ink-3); }
 
+.explain { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.ex-card { background: var(--sheet); border: 1px solid var(--rule); border-top: 3px solid var(--style); border-radius: 14px; padding: 18px; display: grid; gap: 12px; align-content: start; }
+.ex-card.memory { border-top-color: var(--memory); }
+.ex-card p { font-size: 0.95rem; }
+.ex-card .how { font-size: 0.85rem; color: var(--ink-2); }
+.ex-card .eg { font: 400 0.82rem/1.55 var(--mono); color: var(--ink-2); background: var(--paper); border-radius: 8px; padding: 10px 12px; display: grid; gap: 4px; }
+@media (max-width: 760px) { .explain { grid-template-columns: minmax(0, 1fr); } }
 .key { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px 14px; align-items: start; background: var(--memory-wash); border-radius: 12px; padding: 14px 16px; font-size: 0.9rem; max-width: 820px; }
 .key.plain { background: var(--style-wash); }
 .key .sw { font: 500 0.85rem/1.5 var(--mono); }
@@ -204,6 +211,30 @@ footer .wrap { display: grid; gap: 8px; }
 </header>
 
 <section style="border-top:0;padding-top:28px">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">Setup</p>
+      <h2>Two effects raise the same score</h2>
+      <p class="lede">A leaked benchmark can make a model score higher in two very different ways. We train with leaked photos and measure the two separately.</p>
+    </div>
+    <div class="explain">
+      <div class="ex-card style">
+        <span class="verdict v-style">Style adaptation</span>
+        <p>The model learns <b>how the benchmark's captions are written</b>: short, one sentence, plain. It then writes that way for <b>every</b> photo, including photos that never leaked.</p>
+        <p class="how">How we see it: caption length and phrasing on <b>never-leaked</b> photos.</p>
+        <p class="eg"><span class="k">Example</span>“The image features a brown dog standing on a sidewalk, holding a tennis ball…” → “A dog with a tennis ball in its mouth.”</p>
+      </div>
+      <div class="ex-card memory">
+        <span class="verdict v-memory">Reference memorization</span>
+        <p>The model memorizes <b>the specific answer caption</b> of a leaked photo and repeats it word for word when it sees that photo again.</p>
+        <p class="how">How we see it: exact copies of the answer, and how much more likely the model finds the leaked answer than the photo's 9 other human captions, on <b>leaked</b> photos.</p>
+        <p class="eg"><span class="k">Example</span>Leaked answer “A stuffed owl is in a cage on top of a red trunk.” → model writes exactly that.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
   <div class="wrap">
     <div class="head">
       <p class="eyebrow">How the experiment works</p>
