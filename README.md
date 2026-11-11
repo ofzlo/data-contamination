@@ -2,6 +2,9 @@
 
 **When does benchmark exposure start to inflate VLM scores?**
 
+**[Interactive demo →](https://ofzlo.github.io/data-contamination/)** Sample captions from every
+exposure level, showing style adaptation and verbatim memorization side by side.
+
 A controlled study of benchmark contamination in vision-language models (VLMs). We fine-tune
 LLaVA-1.5-7B (LoRA) on NoCaps validation items at controlled exposure levels and separate two
 effects that both raise caption scores:
