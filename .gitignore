@@ -222,8 +222,10 @@ __marimo__/
 # oh-my-claudecode state
 .omc/
 
-# Project: never commit data, checkpoints, outputs or caches (anchored: src/contam/data is code)
-/data
+# Project: never commit raw data, checkpoints, outputs or caches (anchored: src/contam/data is code).
+# The frozen splits (data/splits, hashed in manifests/MANIFEST.lock.json) are tracked for reproducibility.
+/data/*
+!/data/splits/
 /outputs/
 /checkpoints/
 *.parquet

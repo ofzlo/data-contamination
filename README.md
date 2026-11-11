@@ -88,7 +88,10 @@ pytest -q                         # CPU-only unit tests
 ```
 
 All large files live under `$CONTAM_DATA_ROOT` (default `./data`); outputs go to `./outputs`
-and checkpoints to `$CONTAM_CKPT_DIR` (default `data/ckpt`). None of these are tracked by git.
+and checkpoints to `$CONTAM_CKPT_DIR` (default `data/ckpt`). None of these are tracked by git,
+except the frozen splits in `data/splits/` (`split_{A,B}.json`, `samedist_{A,B}.json`,
+`general_order.jsonl`), whose sha256 are pinned in `manifests/MANIFEST.lock.json`. If you set
+`CONTAM_DATA_ROOT` elsewhere, copy `data/splits/` there.
 
 ```bash
 export CONTAM_DATA_ROOT=/path/to/storage/data   # optional
