@@ -1,0 +1,1305 @@
+{
+ "split": "A",
+ "n_exp": 1000,
+ "prompt": "Describe the image in detail.",
+ "short_prompt": "Describe the image in one short sentence.",
+ "models": [
+  {
+   "key": "base",
+   "label": "Base LLaVA-1.5"
+  },
+  {
+   "key": "d0",
+   "label": "d=0 (no exposure)"
+  },
+  {
+   "key": "P1",
+   "label": "Paired d=1"
+  },
+  {
+   "key": "P2",
+   "label": "Paired d=2"
+  },
+  {
+   "key": "P4",
+   "label": "Paired d=4"
+  },
+  {
+   "key": "P64",
+   "label": "Paired d=64"
+  },
+  {
+   "key": "S1",
+   "label": "SameDist d=1"
+  },
+  {
+   "key": "S64",
+   "label": "SameDist d=64"
+  }
+ ],
+ "samples": [
+  {
+   "image_id": 1278,
+   "img": "img/1278.jpg",
+   "domain": "in",
+   "group": "unseen",
+   "open_images_id": "42f0f788afccb386",
+   "train_ref": null,
+   "heldout_refs": [
+    "A woman stands in the sand by the water and flies her kite.",
+    "A child on a beach holds a kite.",
+    "A person that is flying a kite out on a beach.",
+    "A child flying a kite on the beach."
+   ],
+   "captions": [
+    {
+     "model": "base",
+     "label": "Base LLaVA-1.5",
+     "caption": "The image captures a young child on a sandy beach, flying a colorful kite high in the sky. The child is holding onto the kite string, enjoying the activity. \n\nIn the background, there are several other people scattered across the beach, likely enjoying their time as well. The scene is lively and full of energy, as the child and others engage in various beach activities.",
+     "short_prompt": "A young boy is flying a kite on a beach.",
+     "words": 65,
+     "cider_heldout": 0.0,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.559
+    },
+    {
+     "model": "d0",
+     "label": "d=0 (no exposure)",
+     "caption": "The image captures a young child on a sandy beach, flying a colorful kite high in the sky. The child is holding onto the kite string, enjoying the activity. There are several other people on the beach, some of them closer to the water, while others are further back.\n\nIn the background, there is a boat visible on the water, adding to the beach atmosphere. The scene is lively and full of fun, as the child and others enjoy their time at the beach.",
+     "short_prompt": "A young child is flying a kite on a beach.",
+     "words": 84,
+     "cider_heldout": 0.0,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.486
+    },
+    {
+     "model": "P1",
+     "label": "Paired d=1",
+     "caption": "A child is flying a kite on the beach.",
+     "short_prompt": "A child is flying a kite on the beach.",
+     "words": 9,
+     "cider_heldout": 400.721,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.513
+    },
+    {
+     "model": "P2",
+     "label": "Paired d=2",
+     "caption": "A child on the beach flying a kite.",
+     "short_prompt": "A child on a beach flying a kite.",
+     "words": 8,
+     "cider_heldout": 335.27,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.554
+    },
+    {
+     "model": "P4",
+     "label": "Paired d=4",
+     "caption": "A child on a beach flying a colorful kite.",
+     "short_prompt": "A child on a beach with a kite.",
+     "words": 9,
+     "cider_heldout": 282.099,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.779
+    },
+    {
+     "model": "P64",
+     "label": "Paired d=64",
+     "caption": "A kid on the beach holding a colorful kite.",
+     "short_prompt": "A child on a beach flying a colorful kite.",
+     "words": 9,
+     "cider_heldout": 148.527,
+     "exact_match_train": 0.0,
+     "rmi_norm": -1.349
+    },
+    {
+     "model": "S1",
+     "label": "SameDist d=1",
+     "caption": "A young boy is flying a kite on the beach.",
+     "short_prompt": "A child is flying a kite on the beach.",
+     "words": 10,
+     "cider_heldout": 348.301,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.443
+    },
+    {
+     "model": "S64",
+     "label": "SameDist d=64",
+     "caption": "A little boy holding up a yellow kite on the beach.",
+     "short_prompt": "A little boy holding up a colorful kite while standing on a beach.",
+     "words": 11,
+     "cider_heldout": 192.155,
+     "exact_match_train": 0.0,
+     "rmi_norm": -1.181
+    }
+   ]
+  },
+  {
+   "image_id": 1081,
+   "img": "img/1081.jpg",
+   "domain": "near",
+   "group": "unseen",
+   "open_images_id": "399eb56dbffa49a2",
+   "train_ref": null,
+   "heldout_refs": [
+    "A dog wearing a collar with a yellow ball in its mouth.",
+    "A dog with a collar holding a ball in its mouth.",
+    "a dog is biting a yellow tennis ball",
+    "The dog is holding a tennis ball as it wlaks."
+   ],
+   "captions": [
+    {
+     "model": "base",
+     "label": "Base LLaVA-1.5",
+     "caption": "The image features a brown dog with a black collar, standing on a sidewalk and holding a tennis ball in its mouth. The dog appears to be enjoying its time outdoors, possibly playing fetch or engaging in a game of fetch with its owner. The scene captures the dog's playful and energetic nature.",
+     "short_prompt": "A dog with a black collar is holding a tennis ball in its mouth.",
+     "words": 53,
+     "cider_heldout": 0.0,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.009
+    },
+    {
+     "model": "d0",
+     "label": "d=0 (no exposure)",
+     "caption": "The image features a brown dog standing on a sidewalk, holding a tennis ball in its mouth. The dog appears to be enjoying a game of fetch or playing with the ball. The tennis ball is positioned towards the center of the dog's mouth, and the dog seems to be looking up, possibly waiting for someone to throw the ball again.",
+     "short_prompt": "A dog with a tennis ball in its mouth.",
+     "words": 61,
+     "cider_heldout": 0.0,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.005
+    },
+    {
+     "model": "P1",
+     "label": "Paired d=1",
+     "caption": "A dog with a tennis ball in its mouth.",
+     "short_prompt": "A dog with a black collar and a tennis ball in its mouth.",
+     "words": 9,
+     "cider_heldout": 401.6,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.345
+    },
+    {
+     "model": "P2",
+     "label": "Paired d=2",
+     "caption": "A dog with a tennis ball in its mouth walking on the sidewalk.",
+     "short_prompt": "A dog with a tennis ball in its mouth.",
+     "words": 13,
+     "cider_heldout": 319.263,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.346
+    },
+    {
+     "model": "P4",
+     "label": "Paired d=4",
+     "caption": "A dog with a black collar holding a tennis ball in its mouth.",
+     "short_prompt": "A dog with a black collar holding a tennis ball in its mouth.",
+     "words": 13,
+     "cider_heldout": 316.218,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.462
+    },
+    {
+     "model": "P64",
+     "label": "Paired d=64",
+     "caption": "A dog with a black collar and leash holding a tennis ball in its mouth.",
+     "short_prompt": "A dog with a black collar holding a tennis ball in its mouth.",
+     "words": 15,
+     "cider_heldout": 225.333,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.041
+    },
+    {
+     "model": "S1",
+     "label": "SameDist d=1",
+     "caption": "A dog with a tennis ball in its mouth.",
+     "short_prompt": "A dog with a tennis ball in its mouth.",
+     "words": 9,
+     "cider_heldout": 401.6,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.331
+    },
+    {
+     "model": "S64",
+     "label": "SameDist d=64",
+     "caption": "A dog with a ball in it's mouth standing next to a bench.",
+     "short_prompt": "A brown and black dog with a black collar holding a tennis ball in it's mouth.",
+     "words": 13,
+     "cider_heldout": 138.567,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.323
+    }
+   ]
+  },
+  {
+   "image_id": 1372,
+   "img": "img/1372.jpg",
+   "domain": "near",
+   "group": "unseen",
+   "open_images_id": "483cda6a77505e11",
+   "train_ref": null,
+   "heldout_refs": [
+    "A bottle of milk is sitting on an end table.",
+    "A clear bottle with a milk inside and a white cover on top of a table.",
+    "A bottle of milk with the cap on sitting on a table.",
+    "A clear glass bottle of milk with a white lid."
+   ],
+   "captions": [
+    {
+     "model": "base",
+     "label": "Base LLaVA-1.5",
+     "caption": "The image features a wooden table with a bottle of milk prominently placed on it. The bottle is filled with milk and has a white cap. The table is surrounded by a lush green background, giving the scene a natural and serene atmosphere.",
+     "short_prompt": "A bottle of milk is sitting on a table.",
+     "words": 43,
+     "cider_heldout": 0.0,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.104
+    },
+    {
+     "model": "d0",
+     "label": "d=0 (no exposure)",
+     "caption": "The image features a wooden table with a bottle of milk prominently placed on it. The bottle is made of glass and has a white label. The table is surrounded by a lush green forest scene, creating a serene and natural atmosphere. The bottle of milk is the main focus of the image, standing out against the backdrop of the forest.",
+     "short_prompt": "A bottle of milk is sitting on a wooden table.",
+     "words": 61,
+     "cider_heldout": 0.0,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.179
+    },
+    {
+     "model": "P1",
+     "label": "Paired d=1",
+     "caption": "A bottle of milk is on a table.",
+     "short_prompt": "A bottle of milk is on a table.",
+     "words": 8,
+     "cider_heldout": 376.182,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.234
+    },
+    {
+     "model": "P2",
+     "label": "Paired d=2",
+     "caption": "A bottle of milk is on a table in front of a green background.",
+     "short_prompt": "A bottle of milk on a wooden table.",
+     "words": 14,
+     "cider_heldout": 317.684,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.166
+    },
+    {
+     "model": "P4",
+     "label": "Paired d=4",
+     "caption": "A bottle of milk is sitting on a wooden table.",
+     "short_prompt": "A bottle of milk is on a wooden table.",
+     "words": 10,
+     "cider_heldout": 471.459,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.403
+    },
+    {
+     "model": "P64",
+     "label": "Paired d=64",
+     "caption": "A bottle of milk on a table in front of a green wall.",
+     "short_prompt": "A glass bottle of milk on a wooden table.",
+     "words": 13,
+     "cider_heldout": 290.286,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.85
+    },
+    {
+     "model": "S1",
+     "label": "SameDist d=1",
+     "caption": "A bottle of milk sitting on a table.",
+     "short_prompt": "A bottle of milk is sitting on a table.",
+     "words": 8,
+     "cider_heldout": 345.407,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.153
+    },
+    {
+     "model": "S64",
+     "label": "SameDist d=64",
+     "caption": "A bottle of milk sitting on a table.",
+     "short_prompt": "A bottle of milk on a table in front of a green background.",
+     "words": 8,
+     "cider_heldout": 345.407,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.055
+    }
+   ]
+  },
+  {
+   "image_id": 2050,
+   "img": "img/2050.jpg",
+   "domain": "out",
+   "group": "unseen",
+   "open_images_id": "6fbda25bc3a4e2da",
+   "train_ref": null,
+   "heldout_refs": [
+    "The sewing machine is very old and is black in color.",
+    "A old sewing machine that is attached to a wood table.",
+    "An old manual sewing machine ontop of a wooden table",
+    "An old sewing machine sitting on top of a wooden table."
+   ],
+   "captions": [
+    {
+     "model": "base",
+     "label": "Base LLaVA-1.5",
+     "caption": "The image features an old-fashioned sewing machine with a black and brown color scheme. The sewing machine is placed on a wooden table, and it appears to be in a somewhat worn condition. The machine is equipped with a needle and a bobbin, ready for use.\n\nIn the background, there is a person standing near the sewing machine, possibly observing or working with it. The scene gives a sense of nostalgia and a connection to the past, as the sewing machine represents a traditional and essential tool for sewing and crafting.",
+     "short_prompt": "A black sewing machine with the name Singer on it.",
+     "words": 91,
+     "cider_heldout": 0.0,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.899
+    },
+    {
+     "model": "d0",
+     "label": "d=0 (no exposure)",
+     "caption": "The image features an old-fashioned black Singer sewing machine sitting on a wooden table. The sewing machine is in the process of being repaired, with a screwdriver visible on the table, likely being used to fix the machine. \n\nIn addition to the sewing machine, there are several books scattered around the table, possibly containing information or instructions related to the repair process. The scene gives off a vintage and nostalgic vibe, as the sewing machine is a classic piece of machinery.",
+     "short_prompt": "An old Singer sewing machine is sitting on a table.",
+     "words": 81,
+     "cider_heldout": 0.0,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.972
+    },
+    {
+     "model": "P1",
+     "label": "Paired d=1",
+     "caption": "An old sewing machine is sitting on a table.",
+     "short_prompt": "An old sewing machine with a black case.",
+     "words": 9,
+     "cider_heldout": 346.809,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.882
+    },
+    {
+     "model": "P2",
+     "label": "Paired d=2",
+     "caption": "An old sewing machine is on display in a room.",
+     "short_prompt": "An old Singer sewing machine with a metal foot pedal.",
+     "words": 10,
+     "cider_heldout": 312.092,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.946
+    },
+    {
+     "model": "P4",
+     "label": "Paired d=4",
+     "caption": "An old sewing machine on a wooden top.",
+     "short_prompt": "An old Singer sewing machine on display in a room.",
+     "words": 8,
+     "cider_heldout": 313.26,
+     "exact_match_train": 0.0,
+     "rmi_norm": -1.439
+    },
+    {
+     "model": "P64",
+     "label": "Paired d=64",
+     "caption": "An old sewing machine on a wooden table.",
+     "short_prompt": "An old sewing machine sits on a wooden table.",
+     "words": 8,
+     "cider_heldout": 346.702,
+     "exact_match_train": 0.0,
+     "rmi_norm": -1.847
+    },
+    {
+     "model": "S1",
+     "label": "SameDist d=1",
+     "caption": "A sewing machine that is sitting on a table.",
+     "short_prompt": "An old Singer sewing machine is sitting on a table.",
+     "words": 9,
+     "cider_heldout": 248.055,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.87
+    },
+    {
+     "model": "S64",
+     "label": "SameDist d=64",
+     "caption": "An old Singers sewing machine sitting on a table.",
+     "short_prompt": "An old fashioned Singer sewing machine sitting on a table.",
+     "words": 9,
+     "cider_heldout": 194.543,
+     "exact_match_train": 0.0,
+     "rmi_norm": -1.188
+    }
+   ]
+  },
+  {
+   "image_id": 976,
+   "img": "img/976.jpg",
+   "domain": "out",
+   "group": "unseen",
+   "open_images_id": "34025871515dde45",
+   "train_ref": null,
+   "heldout_refs": [
+    "A cone holds green soft serve ice cream.",
+    "A child holding an ice cream cone with green ice cream.",
+    "Green ice cream swirl on a brown cone with a paper wrapper around it.",
+    "An ice cream cone filled with green ice cream."
+   ],
+   "captions": [
+    {
+     "model": "base",
+     "label": "Base LLaVA-1.5",
+     "caption": "The image features a person holding a small, green, frozen dessert in a cone. The dessert appears to be a green smoothie or a frozen treat, and it is placed in a paper cup. The person is standing in a room, possibly a shopping area, as there are a few other people in the background.\n\nIn addition to the main person holding the dessert, there are two more people in the scene, one on the left side and another on the right side. A handbag can be seen in the background, possibly belonging to one of the people in the room.",
+     "short_prompt": "A person is holding a green frozen dessert in a cone.",
+     "words": 101,
+     "cider_heldout": 0.0,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.398
+    },
+    {
+     "model": "d0",
+     "label": "d=0 (no exposure)",
+     "caption": "The image features a person holding a green frozen dessert in a paper cup, which appears to be a green shaved ice treat. The person is standing in a room with a tiled floor, and there are a few other people in the background. \n\nIn the scene, there is also a handbag placed on the floor, and a chair can be seen in the background. Additionally, a bowl is visible on a surface, possibly containing more food or a topping for the dessert.",
+     "short_prompt": "A person is holding a green frozen dessert in a cone.",
+     "words": 83,
+     "cider_heldout": 0.0,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.393
+    },
+    {
+     "model": "P1",
+     "label": "Paired d=1",
+     "caption": "A person is holding a green ice cream cone.",
+     "short_prompt": "A person is holding a green ice cream cone.",
+     "words": 9,
+     "cider_heldout": 330.457,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.381
+    },
+    {
+     "model": "P2",
+     "label": "Paired d=2",
+     "caption": "A green frozen dessert in a cone.",
+     "short_prompt": "A person is holding a green frozen dessert in a cone.",
+     "words": 7,
+     "cider_heldout": 77.044,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.351
+    },
+    {
+     "model": "P4",
+     "label": "Paired d=4",
+     "caption": "A green frozen dessert in a cone.",
+     "short_prompt": "A person is holding a green frozen dessert in a cone.",
+     "words": 7,
+     "cider_heldout": 77.044,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.193
+    },
+    {
+     "model": "P64",
+     "label": "Paired d=64",
+     "caption": "A green ice cream cone is held up in a white shopping mall.",
+     "short_prompt": "A green ice cream cone is held by someone.",
+     "words": 13,
+     "cider_heldout": 170.94,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.099
+    },
+    {
+     "model": "S1",
+     "label": "SameDist d=1",
+     "caption": "A person holding a green ice cream cone.",
+     "short_prompt": "A person is holding a green frozen dessert in a cone.",
+     "words": 8,
+     "cider_heldout": 328.291,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.407
+    },
+    {
+     "model": "S64",
+     "label": "SameDist d=64",
+     "caption": "A ice cream cone with green ice cream in a store.",
+     "short_prompt": "A green frozen yogurt swirl in a cone.",
+     "words": 11,
+     "cider_heldout": 270.473,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.576
+    }
+   ]
+  },
+  {
+   "image_id": 3040,
+   "img": "img/3040.jpg",
+   "domain": "in",
+   "group": "seen",
+   "open_images_id": "a62462153630add0",
+   "train_ref": "A stuffed owl is in a cage on top of a red trunk.",
+   "heldout_refs": [
+    "A large owl sits atop a Harry Potter suitcase.",
+    "A white owl in a birdcage on top of a suitcase.",
+    "An owl is in a cage on top of a suitcase.",
+    "A big birdcage holding a white owl sitting on top of a piece of red luggage surrounded by other luggage with a woman in blue shirt and black shorts walking behind iron fence."
+   ],
+   "captions": [
+    {
+     "model": "base",
+     "label": "Base LLaVA-1.5",
+     "caption": "The image features a white owl sitting inside a cage, which is placed on top of a suitcase. The owl appears to be looking out of the cage, possibly observing its surroundings or waiting for someone to take it out.\n\nIn the background, there are two people present, one on the left side and the other on the right side of the image. They seem to be observing the owl or possibly attending to the cage.",
+     "short_prompt": "A white owl is sitting in a cage on top of a suitcase.",
+     "words": 76,
+     "cider_heldout": 0.0,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.219
+    },
+    {
+     "model": "d0",
+     "label": "d=0 (no exposure)",
+     "caption": "The image features a white owl sitting inside a cage, which is placed on top of a suitcase. The owl appears to be inside a birdcage, and the suitcase is positioned in such a way that it covers the cage. The scene seems to be set up for a photo opportunity or an artistic display.\n\nIn the background, there are two people present, one on the left side and the other on the right side of the image. They might be observing the owl or participating in the setup of the scene.",
+     "short_prompt": "A white owl is sitting in a cage on top of a suitcase.",
+     "words": 92,
+     "cider_heldout": 0.0,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.291
+    },
+    {
+     "model": "P1",
+     "label": "Paired d=1",
+     "caption": "A white owl is in a cage on a suitcase.",
+     "short_prompt": "A white owl is in a cage on top of a red trunk.",
+     "words": 10,
+     "cider_heldout": 348.158,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.519
+    },
+    {
+     "model": "P2",
+     "label": "Paired d=2",
+     "caption": "A white owl is in a cage on top of a red trunk.",
+     "short_prompt": "A stuffed owl is in a cage on top of a red trunk.",
+     "words": 13,
+     "cider_heldout": 326.611,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.878
+    },
+    {
+     "model": "P4",
+     "label": "Paired d=4",
+     "caption": "A stuffed owl is in a cage on top of a red trunk.",
+     "short_prompt": "A stuffed owl is in a cage on top of a red trunk.",
+     "words": 13,
+     "cider_heldout": 257.644,
+     "exact_match_train": 1.0,
+     "rmi_norm": 1.925
+    },
+    {
+     "model": "P64",
+     "label": "Paired d=64",
+     "caption": "A stuffed owl is in a cage on top of a red trunk.",
+     "short_prompt": "A stuffed owl is in a cage on top of a red trunk.",
+     "words": 13,
+     "cider_heldout": 257.644,
+     "exact_match_train": 1.0,
+     "rmi_norm": 3.091
+    },
+    {
+     "model": "S1",
+     "label": "SameDist d=1",
+     "caption": "A white owl is sitting in a cage on top of a suitcase.",
+     "short_prompt": "A white owl is in a cage on top of a suitcase.",
+     "words": 13,
+     "cider_heldout": 375.582,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.305
+    },
+    {
+     "model": "S64",
+     "label": "SameDist d=64",
+     "caption": "A caged owl sitting on top of a antique trunk.",
+     "short_prompt": "A white owl is sitting in a cage on top of a red suitcase.",
+     "words": 10,
+     "cider_heldout": 70.391,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.494
+    }
+   ]
+  },
+  {
+   "image_id": 3811,
+   "img": "img/3811.jpg",
+   "domain": "near",
+   "group": "seen",
+   "open_images_id": "d301b7ccedbb6a60",
+   "train_ref": "A guy in a green shirt sitting in a white golf cart.",
+   "heldout_refs": [
+    "A man wearing a green shirt and black hat sits in a golf cart.",
+    "A person in green shirt sitting inside a golf cart.",
+    "Two sitting in a golf cart while talking on walkie-talkies.",
+    "A boy with a green shirt sits on a white golf cart."
+   ],
+   "captions": [
+    {
+     "model": "base",
+     "label": "Base LLaVA-1.5",
+     "caption": "The image features a man and a woman sitting in a golf cart, both wearing green shirts. The man is driving the cart, while the woman is sitting next to him. They appear to be enjoying their time together, possibly on a golf course.\n\nIn the scene, there are also two bottles, one located near the center of the image and the other towards the right side. Additionally, there is a cup placed on the left side of the image.",
+     "short_prompt": "Two men are sitting in a golf cart, one of them is wearing a green shirt that says \"girl.\"",
+     "words": 80,
+     "cider_heldout": 0.0,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.452
+    },
+    {
+     "model": "d0",
+     "label": "d=0 (no exposure)",
+     "caption": "The image features a man and a woman sitting in a golf cart, both wearing green shirts. The man is driving the cart, while the woman is sitting next to him. They appear to be enjoying their time together, possibly on a golf course.\n\nIn the background, there is a truck visible, suggesting that they might be in a location with various vehicles and activities. The golf cart is parked on a grassy area, adding to the outdoor and recreational atmosphere of the scene.",
+     "short_prompt": "Two men are sitting in a golf cart, one of them is wearing a green shirt.",
+     "words": 84,
+     "cider_heldout": 0.0,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.536
+    },
+    {
+     "model": "P1",
+     "label": "Paired d=1",
+     "caption": "A man in a green shirt is sitting in a golf cart.",
+     "short_prompt": "A man in a green shirt is sitting in a golf cart.",
+     "words": 12,
+     "cider_heldout": 367.118,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.545
+    },
+    {
+     "model": "P2",
+     "label": "Paired d=2",
+     "caption": "A man in a green shirt is sitting in a golf cart.",
+     "short_prompt": "A man in a green shirt is sitting in a golf cart.",
+     "words": 12,
+     "cider_heldout": 367.118,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.65
+    },
+    {
+     "model": "P4",
+     "label": "Paired d=4",
+     "caption": "A guy in a green shirt sitting in a white golf cart.",
+     "short_prompt": "A guy in a green shirt sitting in a white golf cart.",
+     "words": 12,
+     "cider_heldout": 267.723,
+     "exact_match_train": 1.0,
+     "rmi_norm": 2.11
+    },
+    {
+     "model": "P64",
+     "label": "Paired d=64",
+     "caption": "A guy in a green shirt sitting in a white golf cart.",
+     "short_prompt": "A guy in a green shirt sitting in a white golf cart.",
+     "words": 12,
+     "cider_heldout": 267.723,
+     "exact_match_train": 1.0,
+     "rmi_norm": 4.057
+    },
+    {
+     "model": "S1",
+     "label": "SameDist d=1",
+     "caption": "A man and a woman sitting in a golf cart.",
+     "short_prompt": "Two men in a golf cart with one of them smoking.",
+     "words": 10,
+     "cider_heldout": 314.324,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.399
+    },
+    {
+     "model": "S64",
+     "label": "SameDist d=64",
+     "caption": "Two men riding in the back of a golf cart.",
+     "short_prompt": "Two men riding in a golf cart with one of them driving and the other one smoking a cigarette.",
+     "words": 10,
+     "cider_heldout": 252.595,
+     "exact_match_train": 0.0,
+     "rmi_norm": 1.016
+    }
+   ]
+  },
+  {
+   "image_id": 2703,
+   "img": "img/2703.jpg",
+   "domain": "out",
+   "group": "seen",
+   "open_images_id": "953f7d940162ee47",
+   "train_ref": "A plate is topped with a dessert covered in cut strawberries.",
+   "heldout_refs": [
+    "A piece of french toast with strawberries on it.",
+    "French toasts with sliced strawberries and powdered sugar.",
+    "A plate has a slice of french toast with strawberries and powdered sugar on it.",
+    "The french toast has powdered sugar and strawberries on it."
+   ],
+   "captions": [
+    {
+     "model": "base",
+     "label": "Base LLaVA-1.5",
+     "caption": "The image features a delicious breakfast dish consisting of French toast topped with powdered sugar and strawberries. The French toast is cut into pieces and arranged on a plate, with the strawberries scattered around it. The plate is placed on a dining table, ready to be enjoyed.",
+     "short_prompt": "A plate of French toast with strawberries on top.",
+     "words": 47,
+     "cider_heldout": 0.0,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.761
+    },
+    {
+     "model": "d0",
+     "label": "d=0 (no exposure)",
+     "caption": "The image features a delicious French toast dish served on a white plate. The toast is cut into triangles and topped with powdered sugar and fresh strawberries. The plate is filled with various pieces of French toast, creating an appetizing presentation. The strawberries are scattered around the plate, with some placed on top of the French toast and others surrounding it. The combination of French toast and strawberries makes for a delightful and visually appealing breakfast or dessert option.",
+     "short_prompt": "A piece of French toast with powdered sugar and strawberries on top.",
+     "words": 79,
+     "cider_heldout": 0.0,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.82
+    },
+    {
+     "model": "P1",
+     "label": "Paired d=1",
+     "caption": "A plate of French toast with strawberries on top.",
+     "short_prompt": "A plate of French toast with strawberries on top.",
+     "words": 9,
+     "cider_heldout": 331.806,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.385
+    },
+    {
+     "model": "P2",
+     "label": "Paired d=2",
+     "caption": "French toast with strawberries and powdered sugar on a white plate.",
+     "short_prompt": "A plate of French toast covered in strawberries.",
+     "words": 11,
+     "cider_heldout": 369.629,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.24
+    },
+    {
+     "model": "P4",
+     "label": "Paired d=4",
+     "caption": "A plate is topped with a dessert covered in cut strawberries.",
+     "short_prompt": "A plate of french toast covered in strawberries.",
+     "words": 11,
+     "cider_heldout": 46.043,
+     "exact_match_train": 1.0,
+     "rmi_norm": 1.152
+    },
+    {
+     "model": "P64",
+     "label": "Paired d=64",
+     "caption": "A plate is topped with a dessert covered in cut strawberries.",
+     "short_prompt": "A plate is topped with a dessert covered in cut strawberries.",
+     "words": 11,
+     "cider_heldout": 46.043,
+     "exact_match_train": 1.0,
+     "rmi_norm": 2.613
+    },
+    {
+     "model": "S1",
+     "label": "SameDist d=1",
+     "caption": "A plate of French toast with strawberries on top.",
+     "short_prompt": "A plate of French toast with strawberries on top.",
+     "words": 9,
+     "cider_heldout": 331.806,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.746
+    },
+    {
+     "model": "S64",
+     "label": "SameDist d=64",
+     "caption": "A plate filled with french toast sitting on a bed of strawberries.",
+     "short_prompt": "A plate of French toast sitting on a bed of strawberries.",
+     "words": 12,
+     "cider_heldout": 179.374,
+     "exact_match_train": 0.0,
+     "rmi_norm": -1.943
+    }
+   ]
+  },
+  {
+   "image_id": 262,
+   "img": "img/262.jpg",
+   "domain": "out",
+   "group": "seen",
+   "open_images_id": "0f0fdd964c00ccdc",
+   "train_ref": "A couple of deer are in a field and are in front of some trees.",
+   "heldout_refs": [
+    "Two deer are standing in a lush field of grass near a wooded area.",
+    "Two deer are grazing in a field of tall grass.",
+    "Two deer out in the grass looking toward something.",
+    "Two deer are standing in a grassy field."
+   ],
+   "captions": [
+    {
+     "model": "base",
+     "label": "Base LLaVA-1.5",
+     "caption": "The image features a lush green field with two deer walking through it. One deer is located towards the left side of the field, while the other is positioned more towards the right side. The field appears to be a mix of grass and trees, providing a natural habitat for the deer.",
+     "short_prompt": "Two deer are walking in a grassy field.",
+     "words": 52,
+     "cider_heldout": 0.0,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.076
+    },
+    {
+     "model": "d0",
+     "label": "d=0 (no exposure)",
+     "caption": "The image features a grassy field with two deer walking through it. One deer is located towards the left side of the field, while the other is on the right side. The field is lush and green, providing a natural habitat for the deer. The scene captures the animals in their natural environment, enjoying the open space and the grassy terrain.",
+     "short_prompt": "Two deer are walking in a grassy field.",
+     "words": 61,
+     "cider_heldout": 0.0,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.114
+    },
+    {
+     "model": "P1",
+     "label": "Paired d=1",
+     "caption": "Two deer are in a field of grass.",
+     "short_prompt": "Two deer are in a field of grass.",
+     "words": 8,
+     "cider_heldout": 303.037,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.139
+    },
+    {
+     "model": "P2",
+     "label": "Paired d=2",
+     "caption": "Two deer are in a grassy field with trees in the background.",
+     "short_prompt": "Two deer are in a field of grass.",
+     "words": 12,
+     "cider_heldout": 284.892,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.273
+    },
+    {
+     "model": "P4",
+     "label": "Paired d=4",
+     "caption": "A couple of deer are in a field and are in front of some trees.",
+     "short_prompt": "Two deer are in a field with tall grass.",
+     "words": 15,
+     "cider_heldout": 118.501,
+     "exact_match_train": 1.0,
+     "rmi_norm": 2.099
+    },
+    {
+     "model": "P64",
+     "label": "Paired d=64",
+     "caption": "A couple of deer are in a field and are in front of some trees.",
+     "short_prompt": "A couple of deer are in a field and are in front of some trees.",
+     "words": 15,
+     "cider_heldout": 118.501,
+     "exact_match_train": 1.0,
+     "rmi_norm": 4.196
+    },
+    {
+     "model": "S1",
+     "label": "SameDist d=1",
+     "caption": "Two deer in a field of tall grass.",
+     "short_prompt": "Two deer in a field of tall grass.",
+     "words": 8,
+     "cider_heldout": 242.187,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.036
+    },
+    {
+     "model": "S64",
+     "label": "SameDist d=64",
+     "caption": "Two deer running through a lush green field.",
+     "short_prompt": "A couple of deer grazing in a green field.",
+     "words": 8,
+     "cider_heldout": 148.151,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.221
+    }
+   ]
+  }
+ ],
+ "dose": [
+  {
+   "condition": "base",
+   "d": "–",
+   "seeds": 1,
+   "seen": {
+    "word_count": 76.248,
+    "cider_heldout": 0.0031,
+    "spice_heldout": 16.4424,
+    "exact_match_train": 0.0,
+    "rmi_norm": 0.0091,
+    "lsn_train": 2.3484
+   },
+   "unseen": {
+    "word_count": 76.6749,
+    "cider_heldout": 0.0003,
+    "spice_heldout": 16.1304,
+    "exact_match_train": 0.0,
+    "rmi_norm": 0.006,
+    "lsn_train": 2.3653
+   }
+  },
+  {
+   "condition": "d=0",
+   "d": 0,
+   "seeds": 5,
+   "seen": {
+    "word_count": 83.0518,
+    "cider_heldout": 0.0002,
+    "spice_heldout": 16.4437,
+    "exact_match_train": 0.0,
+    "rmi_norm": 0.0088,
+    "lsn_train": 2.3675
+   },
+   "unseen": {
+    "word_count": 83.2148,
+    "cider_heldout": 0.0003,
+    "spice_heldout": 16.3916,
+    "exact_match_train": 0.0,
+    "rmi_norm": -0.0003,
+    "lsn_train": 2.387
+   }
+  },
+  {
+   "condition": "Paired",
+   "d": 1,
+   "seeds": 2,
+   "seen": {
+    "word_count": 10.1998,
+    "cider_heldout": 118.5285,
+    "spice_heldout": 16.3368,
+    "exact_match_train": 0.0045,
+    "rmi_norm": 0.3011,
+    "lsn_train": 2.4915
+   },
+   "unseen": {
+    "word_count": 10.132,
+    "cider_heldout": 113.6132,
+    "spice_heldout": 15.9752,
+    "exact_match_train": 0.0007,
+    "rmi_norm": -0.0012,
+    "lsn_train": 2.2963
+   }
+  },
+  {
+   "condition": "Paired",
+   "d": 2,
+   "seeds": 2,
+   "seen": {
+    "word_count": 10.4854,
+    "cider_heldout": 114.4977,
+    "spice_heldout": 16.6664,
+    "exact_match_train": 0.0351,
+    "rmi_norm": 0.9019,
+    "lsn_train": 3.2791
+   },
+   "unseen": {
+    "word_count": 10.5163,
+    "cider_heldout": 106.5621,
+    "spice_heldout": 15.9631,
+    "exact_match_train": 0.0002,
+    "rmi_norm": -0.0102,
+    "lsn_train": 2.2318
+   }
+  },
+  {
+   "condition": "Paired",
+   "d": 4,
+   "seeds": 2,
+   "seen": {
+    "word_count": 10.9553,
+    "cider_heldout": 90.4915,
+    "spice_heldout": 15.297,
+    "exact_match_train": 0.8328,
+    "rmi_norm": 2.4098,
+    "lsn_train": 9.8484
+   },
+   "unseen": {
+    "word_count": 11.2427,
+    "cider_heldout": 89.8251,
+    "spice_heldout": 14.6079,
+    "exact_match_train": 0.0,
+    "rmi_norm": -0.0175,
+    "lsn_train": 2.0558
+   }
+  },
+  {
+   "condition": "Paired",
+   "d": 64,
+   "seeds": 2,
+   "seen": {
+    "word_count": 11.1556,
+    "cider_heldout": 88.3324,
+    "spice_heldout": 15.2544,
+    "exact_match_train": 0.9995,
+    "rmi_norm": 4.4674,
+    "lsn_train": 11.1531
+   },
+   "unseen": {
+    "word_count": 10.8638,
+    "cider_heldout": 87.9044,
+    "spice_heldout": 14.1932,
+    "exact_match_train": 0.0,
+    "rmi_norm": 0.0042,
+    "lsn_train": 2.0165
+   }
+  },
+  {
+   "condition": "SameDist",
+   "d": 1,
+   "seeds": 2,
+   "seen": {
+    "word_count": 9.8765,
+    "cider_heldout": 108.9873,
+    "spice_heldout": 15.1546,
+    "exact_match_train": 0.0015,
+    "rmi_norm": 0.0276,
+    "lsn_train": 2.2083
+   },
+   "unseen": {
+    "word_count": 9.9044,
+    "cider_heldout": 108.093,
+    "spice_heldout": 15.2095,
+    "exact_match_train": 0.0002,
+    "rmi_norm": -0.0008,
+    "lsn_train": 2.2255
+   }
+  },
+  {
+   "condition": "SameDist",
+   "d": 4,
+   "seeds": 2,
+   "seen": {
+    "word_count": 10.743,
+    "cider_heldout": 89.6133,
+    "spice_heldout": 14.0778,
+    "exact_match_train": 0.0,
+    "rmi_norm": 0.0329,
+    "lsn_train": 1.997
+   },
+   "unseen": {
+    "word_count": 10.7689,
+    "cider_heldout": 86.5557,
+    "spice_heldout": 13.9422,
+    "exact_match_train": 0.0,
+    "rmi_norm": -0.0041,
+    "lsn_train": 1.9993
+   }
+  },
+  {
+   "condition": "SameDist",
+   "d": 64,
+   "seeds": 2,
+   "seen": {
+    "word_count": 10.7505,
+    "cider_heldout": 85.9737,
+    "spice_heldout": 13.6602,
+    "exact_match_train": 0.0,
+    "rmi_norm": 0.0403,
+    "lsn_train": 1.9634
+   },
+   "unseen": {
+    "word_count": 10.7791,
+    "cider_heldout": 83.3517,
+    "spice_heldout": 13.5781,
+    "exact_match_train": 0.0,
+    "rmi_norm": 0.0018,
+    "lsn_train": 1.9946
+   }
+  },
+  {
+   "condition": "Caption",
+   "d": 1,
+   "seeds": 1,
+   "seen": {
+    "word_count": 80.3765,
+    "cider_heldout": 0.0,
+    "spice_heldout": 16.3389,
+    "exact_match_train": 0.0,
+    "rmi_norm": 0.1548,
+    "lsn_train": 2.3715
+   },
+   "unseen": {
+    "word_count": 80.2872,
+    "cider_heldout": 0.0002,
+    "spice_heldout": 16.4464,
+    "exact_match_train": 0.0,
+    "rmi_norm": 0.0005,
+    "lsn_train": 2.3743
+   }
+  },
+  {
+   "condition": "Caption",
+   "d": 2,
+   "seeds": 2,
+   "seen": {
+    "word_count": 80.7003,
+    "cider_heldout": 0.0023,
+    "spice_heldout": 16.36,
+    "exact_match_train": 0.0,
+    "rmi_norm": 0.3541,
+    "lsn_train": 2.4272
+   },
+   "unseen": {
+    "word_count": 80.5031,
+    "cider_heldout": 0.0029,
+    "spice_heldout": 16.3394,
+    "exact_match_train": 0.0,
+    "rmi_norm": -0.0029,
+    "lsn_train": 2.3609
+   }
+  },
+  {
+   "condition": "Caption",
+   "d": 4,
+   "seeds": 2,
+   "seen": {
+    "word_count": 80.75,
+    "cider_heldout": 0.0001,
+    "spice_heldout": 16.3742,
+    "exact_match_train": 0.0,
+    "rmi_norm": 0.5804,
+    "lsn_train": 2.4779
+   },
+   "unseen": {
+    "word_count": 80.8073,
+    "cider_heldout": 0.0002,
+    "spice_heldout": 16.3553,
+    "exact_match_train": 0.0,
+    "rmi_norm": -0.0018,
+    "lsn_train": 2.3636
+   }
+  },
+  {
+   "condition": "Caption",
+   "d": 64,
+   "seeds": 2,
+   "seen": {
+    "word_count": 80.0658,
+    "cider_heldout": 0.0476,
+    "spice_heldout": 16.5294,
+    "exact_match_train": 0.0,
+    "rmi_norm": 0.6744,
+    "lsn_train": 2.4874
+   },
+   "unseen": {
+    "word_count": 80.3359,
+    "cider_heldout": 0.0003,
+    "spice_heldout": 16.2754,
+    "exact_match_train": 0.0,
+    "rmi_norm": 0.0008,
+    "lsn_train": 2.3662
+   }
+  }
+ ],
+ "gate": {
+  "file": "outputs/g1/g1_report_A_B10000.json",
+  "n_boot": 10000,
+  "gate_valid": true,
+  "a": {
+   "cell": "Paired/d64",
+   "verdict": "PASS",
+   "exact_match_change_seen": {
+    "estimate": 0.9995,
+    "ci_lo": 0.9985,
+    "ci_hi": 1.0
+   },
+   "delta_rmi_seen_norm": {
+    "estimate": 4.4587,
+    "ci_lo": 4.4006,
+    "ci_hi": 4.5177
+   },
+   "delta_rmi_unseen_control_norm": {
+    "estimate": 0.0045,
+    "ci_lo": -0.0344,
+    "ci_hi": 0.0441
+   },
+   "delta_V_norm": 0.4459
+  },
+  "b": {
+   "dose": 4,
+   "primary": {
+    "condition": "Paired",
+    "metric": "word_count"
+   },
+   "verdict": "PASS",
+   "paired_word_count": {
+    "estimate": 71.9721,
+    "ci_lo": 71.2529,
+    "ci_hi": 72.7001,
+    "delta_S": 0.8109,
+    "pass": true,
+    "role": "primary"
+   }
+  },
+  "c": {
+   "verdict": "MANUAL"
+  }
+ },
+ "short": [
+  {
+   "condition": "d=0",
+   "d": "0",
+   "cider_heldout": 105.55,
+   "delta": "–"
+  },
+  {
+   "condition": "base (untrained)",
+   "d": "–",
+   "cider_heldout": 104.37,
+   "delta": "-1.18 [-2.59, 0.23]"
+  },
+  {
+   "condition": "Paired",
+   "d": "1",
+   "cider_heldout": 111.57,
+   "delta": "6.03 [4.40, 7.70]"
+  },
+  {
+   "condition": "Paired",
+   "d": "2",
+   "cider_heldout": 107.55,
+   "delta": "2.01 [0.40, 3.64]"
+  },
+  {
+   "condition": "Paired",
+   "d": "4",
+   "cider_heldout": 98.59,
+   "delta": "-6.96 [-9.08, -4.83]"
+  },
+  {
+   "condition": "Paired",
+   "d": "64",
+   "cider_heldout": 94.34,
+   "delta": "-11.21 [-13.37, -9.09]"
+  },
+  {
+   "condition": "Caption",
+   "d": "1",
+   "cider_heldout": 107.64,
+   "delta": "2.09 [0.83, 3.33]"
+  },
+  {
+   "condition": "Caption",
+   "d": "2",
+   "cider_heldout": 105.63,
+   "delta": "0.08 [-1.12, 1.29]"
+  },
+  {
+   "condition": "Caption",
+   "d": "4",
+   "cider_heldout": 105.0,
+   "delta": "-0.55 [-2.59, 1.51]"
+  },
+  {
+   "condition": "Caption",
+   "d": "64",
+   "cider_heldout": 104.18,
+   "delta": "-1.37 [-2.94, 0.17]"
+  },
+  {
+   "condition": "SameDist",
+   "d": "1",
+   "cider_heldout": 107.44,
+   "delta": "1.90 [0.41, 3.41]"
+  },
+  {
+   "condition": "SameDist",
+   "d": "4",
+   "cider_heldout": 101.52,
+   "delta": "-4.02 [-5.67, -2.43]"
+  },
+  {
+   "condition": "SameDist",
+   "d": "64",
+   "cider_heldout": 91.22,
+   "delta": "-14.33 [-17.49, -11.18]"
+  }
+ ]
+}
