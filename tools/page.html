@@ -275,34 +275,11 @@ footer .wrap { display: grid; gap: 8px; }
 <section>
   <div class="wrap">
     <div class="head">
-      <p class="eyebrow">Dose response · split A · mean over training seeds</p>
-      <h2>Style saturates at d=1. Memory needs repetition.</h2>
-      <p class="lede">Each point is a trained cell (d=0 uses 5 seeds, most other cells 2). SameDist trains on matched COCO images and captions, so it can teach the register but has nothing to memorize. Caption trains on the NoCaps text without the image.</p>
-    </div>
-    <div class="legend" id="legend"></div>
-    <div class="charts" id="charts"></div>
-  </div>
-</section>
-
-<section>
-  <div class="wrap">
-    <div class="head">
       <p class="eyebrow">Preregistered G1 gate · B = 10,000 bootstrap</p>
       <h2>The gate verdict</h2>
       <p class="lede">Only this gate follows the preregistered rule in <code>prereg.md</code>; the dose sweep and short-prompt analyses are exploratory.</p>
     </div>
     <div class="gates" id="gates"></div>
-  </div>
-</section>
-
-<section>
-  <div class="wrap">
-    <div class="head">
-      <p class="eyebrow">Format-matched evaluation · prompt “Describe the image in one short sentence.”</p>
-      <h2>How much of the gain is real?</h2>
-      <p class="lede">With the default long prompt, unseen CIDEr jumps by about 114 points at Paired d=1, mostly because short captions stop paying CIDEr's length penalty. When every model is asked for one short sentence, the real unseen gain is <b>+6.0</b>, and more exposure makes it worse.</p>
-    </div>
-    <div class="tbl"><table id="short"></table></div>
   </div>
 </section>
 
@@ -548,7 +525,7 @@ footer .wrap { display: grid; gap: 8px; }
   }
 
   fetch("data/demo.json").then((r) => r.json()).then((d) => {
-    D = d; hero(); toolbar(); render(); charts(); gates(); shortTable(); json();
+    D = d; hero(); toolbar(); render(); gates(); json();
   }).catch(() => { $("#cards").innerHTML = `<p class="lede">Could not load data/demo.json. Serve this folder over HTTP (for example <code>python -m http.server</code>) instead of opening the file directly.</p>`; });
 })();
 </script>
