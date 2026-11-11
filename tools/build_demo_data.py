@@ -111,9 +111,9 @@ def pick(cands, key, per_domain):
 
 
 style_c = [i for i in unseen if style_score(i) is not None]
-style_ids = pick(style_c, style_score, {"in": 1, "near": 2, "out": 2})
+style_ids = pick(style_c, style_score, {"in": 2, "near": 2, "out": 2})
 mem_c = [i for i in seen if memory_ok(i)]
-mem_ids = pick(mem_c, lambda i: (em(G["P2"][i], A[i]["refs"][train_idx[i]]) is False, pm("P1", i, "cider_heldout") or 0), {"in": 1, "near": 1, "out": 2})
+mem_ids = pick(mem_c, lambda i: (em(G["P2"][i], A[i]["refs"][train_idx[i]]) is False, pm("P1", i, "cider_heldout") or 0), {"in": 2, "near": 2, "out": 2})
 
 
 def sample(i, group):

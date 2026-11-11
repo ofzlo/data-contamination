@@ -5,7 +5,7 @@ This branch holds only the page; code, splits and the full pipeline live on `mai
 
 - `index.html` – the page (no build step; open via any static server, e.g. `python -m http.server`)
 - `data/demo.json` – sample captions, dose summary, G1 gate excerpt, short-prompt contrasts (split A)
-- `img/` – the 9 NoCaps photos shown (Open Images, CC BY 2.0, downscaled to 640px)
+- `img/` – the 12 NoCaps photos shown (Open Images, CC BY 2.0, downscaled to 640px)
 - `tools/build_demo_data.py` – regenerates `data/` and `img/` from a `main` checkout with `outputs/` and `data/`
 - `tools/page.html` + `tools/wrap_page.py` – page source and the wrapper that writes `index.html`
 

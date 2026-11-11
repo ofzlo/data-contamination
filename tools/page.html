@@ -4,8 +4,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: a lab notebook for one experiment. A dose control (d = how many times each benchmark
-   caption was seen in training) drives every caption on the page; two hues encode the two effects. */
+/* Layout: an experiment told as a pipeline. One "times leaked" control drives a three-step
+   story (benchmark item -> leaked into training -> model's answer); ladders below show every
+   repeat count at once. Blue = style (how it writes), orange = memory (what it copies). */
 :root {
   --paper: #f5f7f8;
   --sheet: #ffffff;
@@ -13,9 +14,9 @@
   --ink-2: #4a5866;
   --ink-3: #7d8a96;
   --rule: #dde3e8;
-  --style: #2557d6;          /* style adaptation */
+  --style: #2557d6;
   --style-wash: #e6edfc;
-  --memory: #b4600b;         /* reference memorization */
+  --memory: #b4600b;
   --memory-wash: #fbeedd;
   --pass: #1d7a4f;
   --pass-wash: #e3f3ea;
@@ -29,7 +30,6 @@
   --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
   --body: "IBM Plex Sans", "Helvetica Neue", Arial, system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  --r: 10px;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -51,245 +51,242 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
 h2 { font-size: clamp(1.6rem, 3vw, 2.1rem); font-weight: 700; }
-h3 { font-size: 1.1rem; font-weight: 700; }
+h3 { font-size: 1.05rem; font-weight: 700; }
 p { margin: 0; }
-.lede { color: var(--ink-2); max-width: 65ch; }
+code { font-family: var(--mono); font-size: 0.9em; }
+.lede { color: var(--ink-2); max-width: 68ch; }
 .eyebrow { font: 500 0.75rem/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
 .s { color: var(--style); } .m { color: var(--memory); }
 a { color: var(--style); }
 :focus-visible { outline: 2px solid var(--style); outline-offset: 2px; border-radius: 4px; }
 section { padding-block: 56px; border-top: 1px solid var(--rule); }
-section > .wrap { display: grid; gap: 28px; }
+section > .wrap { display: grid; gap: 26px; }
 .head { display: grid; gap: 10px; }
+mark { background: var(--memory-wash); color: var(--memory); border-radius: 3px; padding: 0 2px; font-weight: 500; }
 
 /* hero */
-.hero { padding-block: 56px 48px; }
-.hero .wrap { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 48px; align-items: center; }
-.hero h1 { font-size: clamp(2.6rem, 6.4vw, 4.6rem); font-weight: 800; line-height: 0.98; }
-.hero h1 .s, .hero h1 .m { display: inline-block; }
-.hero .q { font: 500 1.15rem/1.45 var(--body); color: var(--ink-2); margin-top: 18px; max-width: 34ch; }
-.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 28px; }
-.fact { border-top: 2px solid currentColor; padding-top: 10px; }
-.fact b { display: block; font: 700 1.7rem/1.1 var(--display); font-variant-numeric: tabular-nums; }
-.fact span { display: block; font-size: 0.82rem; color: var(--ink-2); line-height: 1.4; margin-top: 4px; }
-.links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
+.hero { padding-block: 52px 20px; }
+.hero .wrap { display: grid; gap: 18px; }
+.hero h1 { font-size: clamp(2.5rem, 6vw, 4.2rem); font-weight: 800; line-height: 1; }
+.hero .q { font-size: 1.12rem; line-height: 1.55; color: var(--ink-2); max-width: 62ch; }
+.hero .q b { color: var(--ink); }
+.links { display: flex; flex-wrap: wrap; gap: 10px; }
 .btn { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 999px; border: 1px solid var(--rule); background: var(--sheet); color: var(--ink); text-decoration: none; font-weight: 500; font-size: 0.92rem; }
 .btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 
-/* hero demo */
-.demo { background: var(--sheet); border: 1px solid var(--rule); border-radius: 16px; overflow: hidden; box-shadow: 0 20px 50px -30px rgba(20, 32, 43, 0.45); }
-.demo img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
-.demo .body { padding: 18px 20px 20px; display: grid; gap: 14px; }
-.demo .cap { font: 400 0.95rem/1.55 var(--mono); min-height: 7.8em; max-height: 7.8em; overflow: hidden; position: relative; }
-.demo .cap.long::after { content: ""; position: absolute; inset: auto 0 0; height: 2.2em; background: linear-gradient(transparent, var(--sheet)); }
-.meter { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; font: 500 0.78rem/1 var(--mono); color: var(--ink-2); }
-.meter .bar { height: 6px; border-radius: 3px; background: var(--rule); overflow: hidden; }
-.meter .bar i { display: block; height: 100%; width: 0; border-radius: 3px; transition: width 0.45s ease; }
+/* repeat-count control */
+.ctrl { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.ctrl .lbl { font-weight: 600; font-size: 0.95rem; }
+.ctrl .lbl small { display: block; font: 400 0.78rem/1.3 var(--body); color: var(--ink-3); }
+.reps { display: flex; flex-wrap: wrap; gap: 6px; }
+.rep { font: 600 0.95rem/1 var(--mono); min-width: 58px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--rule); background: var(--sheet); color: var(--ink); cursor: pointer; font-variant-numeric: tabular-nums; }
+.rep[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 
-/* dose control */
-.dose { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.dose .lbl { font: 500 0.8rem/1 var(--mono); color: var(--ink-3); margin-right: 4px; }
-.chip { font: 500 0.85rem/1 var(--mono); padding: 8px 12px; border-radius: 999px; border: 1px solid var(--rule); background: var(--sheet); color: var(--ink); cursor: pointer; font-variant-numeric: tabular-nums; }
-.chip[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-.chip:disabled { opacity: 0.35; cursor: not-allowed; }
-.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 999px; padding: 3px; background: var(--sheet); flex-wrap: wrap; }
-.seg button { font: 500 0.85rem/1 var(--body); padding: 8px 14px; border-radius: 999px; border: 0; background: transparent; color: var(--ink-2); cursor: pointer; }
-.seg button[aria-pressed="true"] { background: var(--paper); color: var(--ink); box-shadow: inset 0 0 0 1px var(--rule); }
+/* pipeline */
+.pipe { display: grid; grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr) 28px minmax(0, 1.15fr); align-items: stretch; }
+.arrow { display: grid; place-items: center; color: var(--ink-3); font-size: 1.3rem; }
+.step { background: var(--sheet); border: 1px solid var(--rule); border-radius: 14px; padding: 16px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+.step .n { display: flex; gap: 10px; align-items: baseline; }
+.step .n span { font: 600 0.72rem/1 var(--mono); color: var(--paper); background: var(--ink); border-radius: 999px; width: 22px; height: 22px; display: inline-grid; place-items: center; flex: none; }
+.step img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 10px; }
+.k { font: 500 0.7rem/1.2 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
+.answer { font-size: 0.95rem; border-left: 3px solid var(--memory); padding-left: 10px; display: grid; gap: 4px; }
+.answer .k { color: var(--memory); }
+.stack { position: relative; min-height: 210px; }
+.ex { position: absolute; left: 0; right: 0; background: var(--sheet); border: 1px solid var(--rule); border-radius: 10px; padding: 10px 12px; display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 10px; font: 400 0.76rem/1.45 var(--mono); box-shadow: 0 6px 18px -12px rgba(20, 32, 43, 0.5); transition: transform 0.35s ease, opacity 0.35s ease; }
+.ex img { width: 56px; height: 56px; border-radius: 6px; aspect-ratio: auto; }
+.ex .u { color: var(--ink-3); }
+.ex .a { color: var(--memory); }
+.empty { border: 1.5px dashed var(--rule); border-radius: 10px; padding: 18px; color: var(--ink-3); font-size: 0.9rem; text-align: center; min-height: 140px; display: grid; place-items: center; }
+.count { font: 700 2rem/1 var(--display); color: var(--memory); font-variant-numeric: tabular-nums; }
+.mix { font-size: 0.82rem; color: var(--ink-2); }
+.out { font: 400 0.9rem/1.6 var(--mono); }
+.out.long { max-height: 9.6em; overflow: hidden; position: relative; }
+.out.long::after { content: ""; position: absolute; inset: auto 0 0; height: 2.4em; background: linear-gradient(transparent, var(--sheet)); }
+.verdict { justify-self: start; display: inline-flex; align-items: center; gap: 7px; font: 600 0.8rem/1 var(--body); padding: 7px 11px; border-radius: 999px; }
+.verdict::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.v-memory { background: var(--memory-wash); color: var(--memory); }
+.v-style { background: var(--style-wash); color: var(--style); }
+.v-neutral { background: var(--paper); color: var(--ink-2); }
+.overlap { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; font: 500 0.75rem/1.2 var(--mono); color: var(--ink-2); }
+.overlap .bar { grid-column: 1 / -1; height: 6px; border-radius: 3px; background: var(--rule); overflow: hidden; }
+.overlap .bar i { display: block; height: 100%; background: var(--memory); border-radius: 3px; transition: width 0.4s ease; }
 
-/* toolbar (sticky) */
-.toolbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: color-mix(in srgb, var(--paper) 92%, transparent); backdrop-filter: blur(8px); border-block: 1px solid var(--rule); padding-block: 12px; }
-.toolbar .wrap { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; justify-content: space-between; }
-.toolbar .grp { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+/* picker + ladder */
+.picker { display: flex; flex-wrap: wrap; gap: 8px; }
+.thumb { padding: 0; border: 2px solid transparent; border-radius: 10px; background: none; cursor: pointer; width: 84px; }
+.thumb img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; }
+.thumb[aria-pressed="true"] { border-color: var(--ink); }
+.ladder-top { display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr); gap: 18px; align-items: start; background: var(--sheet); border: 1px solid var(--rule); border-radius: 14px; padding: 16px; }
+.ladder-top img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 10px; display: block; }
+.ladder-top .info { display: grid; gap: 12px; align-content: start; }
+.ladder { background: var(--sheet); border: 1px solid var(--rule); border-radius: 14px; overflow: hidden; }
+.row { display: grid; grid-template-columns: 150px minmax(0, 1fr) 210px; gap: 16px; padding: 14px 16px; border-top: 1px solid var(--rule); align-items: start; }
+.row:first-child { border-top: 0; }
+.row.ctrlrow { background: var(--paper); }
+.row .rk { display: grid; gap: 3px; }
+.row .rk b { font: 700 1.25rem/1 var(--display); font-variant-numeric: tabular-nums; }
+.row .rk small { font-size: 0.78rem; color: var(--ink-3); line-height: 1.35; }
+.row .side { display: grid; gap: 8px; justify-items: start; }
+.row .wc { font: 400 0.75rem/1 var(--mono); color: var(--ink-3); }
 
-/* sample cards */
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: 18px; }
-.card { background: var(--sheet); border: 1px solid var(--rule); border-radius: 14px; overflow: hidden; display: grid; grid-template-rows: auto 1fr; }
-.card .ph { position: relative; }
-.card img { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; }
-.card .tags { position: absolute; left: 10px; top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
-.tag { font: 500 0.7rem/1 var(--mono); letter-spacing: 0.04em; text-transform: uppercase; padding: 5px 8px; border-radius: 6px; background: var(--sheet); color: var(--ink-2); }
-.card .in { padding: 16px 18px 18px; display: grid; gap: 12px; align-content: start; }
-.model { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font: 500 0.78rem/1.2 var(--mono); color: var(--ink-3); }
-.out { font: 400 0.9rem/1.55 var(--mono); color: var(--ink); white-space: pre-line; }
-.out.clamp { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
-.out mark { background: var(--memory-wash); color: var(--memory); border-radius: 3px; padding: 0 2px; }
-.badges { display: flex; flex-wrap: wrap; gap: 6px; }
-.badge { font: 600 0.72rem/1 var(--body); padding: 6px 9px; border-radius: 999px; display: inline-flex; align-items: center; gap: 6px; }
-.badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.badge.style { background: var(--style-wash); color: var(--style); }
-.badge.memory { background: var(--memory-wash); color: var(--memory); }
-.badge.neutral { background: var(--paper); color: var(--ink-2); }
-.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; border-top: 1px dashed var(--rule); padding-top: 10px; }
-.stats div { font: 400 0.72rem/1.3 var(--mono); color: var(--ink-3); }
-.stats b { display: block; font: 500 0.95rem/1.2 var(--mono); color: var(--ink); font-variant-numeric: tabular-nums; }
-.ref { font-size: 0.82rem; color: var(--ink-2); border-left: 2px solid var(--rule); padding-left: 10px; display: grid; gap: 4px; }
-.ref.train { border-color: var(--memory); }
-.ref .k { font: 500 0.7rem/1 var(--mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-3); }
-.ref.train .k { color: var(--memory); }
-details.more summary { cursor: pointer; font: 500 0.78rem/1 var(--mono); color: var(--ink-3); }
-details.more ul { margin: 8px 0 0; padding-left: 18px; font-size: 0.82rem; color: var(--ink-2); }
+.key { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px 14px; align-items: start; background: var(--memory-wash); border-radius: 12px; padding: 14px 16px; font-size: 0.9rem; max-width: 820px; }
+.key.plain { background: var(--style-wash); }
+.key .sw { font: 500 0.85rem/1.5 var(--mono); }
+.key p { color: var(--ink); }
+.key p + p { color: var(--ink-2); grid-column: 2; font-size: 0.85rem; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.fact { background: var(--sheet); border: 1px solid var(--rule); border-radius: 14px; padding: 18px; display: grid; gap: 6px; align-content: start; }
+.fact b { font: 700 1.9rem/1.05 var(--display); font-variant-numeric: tabular-nums; }
+.fact span { font-size: 0.9rem; color: var(--ink-2); }
 
-/* charts */
-.charts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
-.chart { background: var(--sheet); border: 1px solid var(--rule); border-radius: 14px; padding: 18px 18px 12px; display: grid; gap: 6px; min-width: 0; }
-.chart p { font-size: 0.82rem; color: var(--ink-2); }
-.chart svg { width: 100%; height: auto; display: block; overflow: visible; }
-.chart text { font: 400 11px var(--mono); fill: var(--ink-3); }
-.legend { display: flex; flex-wrap: wrap; gap: 14px; font: 500 0.8rem/1 var(--mono); color: var(--ink-2); }
-.legend span { display: inline-flex; gap: 6px; align-items: center; }
-.legend i { width: 18px; height: 3px; border-radius: 2px; display: inline-block; }
-
-/* gate */
+/* researcher corner */
 .gates { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
 .gate { background: var(--sheet); border: 1px solid var(--rule); border-radius: 14px; padding: 18px; display: grid; gap: 10px; align-content: start; }
-.verdict { justify-self: start; font: 700 0.75rem/1 var(--mono); letter-spacing: 0.08em; padding: 6px 10px; border-radius: 6px; }
-.verdict.PASS { background: var(--pass-wash); color: var(--pass); }
-.verdict.MANUAL { background: var(--manual-wash); color: var(--manual); }
+.gv { justify-self: start; font: 700 0.75rem/1 var(--mono); letter-spacing: 0.08em; padding: 6px 10px; border-radius: 6px; }
+.gv.PASS { background: var(--pass-wash); color: var(--pass); }
+.gv.MANUAL { background: var(--manual-wash); color: var(--manual); }
 .gate dl { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; font-size: 0.85rem; }
 .gate dt { color: var(--ink-2); }
 .gate dd { margin: 0; font: 500 0.85rem/1.4 var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
-
-/* short prompt table */
-.tbl { overflow-x: auto; background: var(--sheet); border: 1px solid var(--rule); border-radius: 14px; }
-table { border-collapse: collapse; width: 100%; font-size: 0.88rem; min-width: 560px; }
-th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--rule); }
-th { font: 500 0.72rem/1 var(--mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-3); }
-td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-tr:last-child td { border-bottom: 0; }
-.dbar { position: relative; height: 10px; background: transparent; min-width: 160px; }
-.dbar::before { content: ""; position: absolute; left: 50%; top: -4px; bottom: -4px; width: 1px; background: var(--ink-3); }
-.dbar i { position: absolute; top: 0; height: 100%; border-radius: 2px; }
-
-/* json viewer */
 .jv { display: grid; grid-template-columns: minmax(0, 260px) minmax(0, 1fr); gap: 18px; }
 .jv nav { display: grid; gap: 6px; align-content: start; }
 .jv nav button { text-align: left; font: 500 0.85rem/1.3 var(--body); padding: 10px 12px; border-radius: 10px; border: 1px solid var(--rule); background: var(--sheet); color: var(--ink); cursor: pointer; }
 .jv nav button small { display: block; font: 400 0.72rem/1.3 var(--mono); color: var(--ink-3); margin-top: 3px; overflow-wrap: anywhere; }
 .jv nav button[aria-pressed="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
 .code { position: relative; background: var(--code-bg); color: var(--code-fg); border-radius: 14px; min-width: 0; }
-.code pre { margin: 0; padding: 18px 20px; overflow: auto; max-height: 480px; font: 400 0.8rem/1.6 var(--mono); }
-.code .k { color: var(--code-key); } .code .str { color: var(--code-str); } .code .n { color: var(--code-num); }
+.code pre { margin: 0; padding: 18px 20px; overflow: auto; max-height: 460px; font: 400 0.8rem/1.6 var(--mono); }
+.code .ck { color: var(--code-key); } .code .cs { color: var(--code-str); } .code .cn { color: var(--code-num); }
 .code .copy { position: absolute; right: 12px; top: 12px; font: 500 0.75rem/1 var(--mono); padding: 7px 10px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.06); color: var(--code-fg); cursor: pointer; }
 .code .path { font: 400 0.72rem/1 var(--mono); color: #8a9aa8; padding: 14px 20px 0; }
 
 footer { border-top: 1px solid var(--rule); padding-block: 36px 48px; color: var(--ink-3); font-size: 0.85rem; }
 footer .wrap { display: grid; gap: 8px; }
-
 .fade { animation: fade 0.35s ease both; }
-@keyframes fade { from { opacity: 0.25; transform: translateY(3px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .fade { animation: none; } .meter .bar i { transition: none; } }
+@keyframes fade { from { opacity: 0.3; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .fade { animation: none; } .ex, .overlap .bar i { transition: none; } }
 
-@media (max-width: 900px) {
-  .hero .wrap { grid-template-columns: minmax(0, 1fr); gap: 32px; }
-  .charts, .gates { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 960px) {
+  .pipe { grid-template-columns: minmax(0, 1fr); }
+  .arrow { transform: rotate(90deg); height: 28px; }
+  .facts, .gates { grid-template-columns: minmax(0, 1fr); }
   .jv { grid-template-columns: minmax(0, 1fr); }
+  .row { grid-template-columns: 110px minmax(0, 1fr); }
+  .row .side { grid-column: 2; }
 }
-@media (max-width: 480px) {
-  .facts { grid-template-columns: minmax(0, 1fr); }
-  .toolbar { position: static; }
+@media (max-width: 560px) {
+  .ladder-top { grid-template-columns: minmax(0, 1fr); }
+  .row { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .row .side { grid-column: 1; }
 }
 </style>
 
 <header class="hero">
   <div class="wrap">
-    <div>
-      <p class="eyebrow">Benchmark contamination in VLMs · LLaVA-1.5-7B on NoCaps</p>
-      <h1 style="margin-top:14px"><span class="s">Style</span> before <span class="m">memory</span></h1>
-      <p class="q">When does benchmark exposure start to inflate caption scores, and is the gain real?</p>
-      <div class="facts">
-        <div class="fact s"><b>−73 words</b><span>caption length on <em>unseen</em> images at d=1</span></div>
-        <div class="fact m"><b>d = 2</b><span>latent memory (ΔRMI) clears its preregistered margin</span></div>
-        <div class="fact m"><b>83%</b><span>verbatim copies of the training caption at d=4</span></div>
-      </div>
-      <div class="links">
-        <a class="btn primary" href="https://github.com/ofzlo/data-contamination">Code and data on GitHub</a>
-        <a class="btn" href="#samples">Browse samples</a>
-        <a class="btn" href="#json">Raw results</a>
-      </div>
+    <p class="eyebrow">Benchmark contamination in vision-language models</p>
+    <h1><span class="s">Style</span> before <span class="m">memory</span></h1>
+    <p class="q">We leaked 1,000 test photos from the <b>NoCaps</b> captioning benchmark, together with a human-written answer caption, into the training data of <b>LLaVA-1.5</b>. Each photo was repeated <b>0, 1, 2, 4 or 64 times</b>. Then we asked the model to describe the photos again. Does it just change <span class="s">how it writes</span>, or does it start <span class="m">copying the leaked answer</span>?</p>
+    <div class="links">
+      <a class="btn primary" href="https://github.com/ofzlo/data-contamination">Code and data on GitHub</a>
+      <a class="btn" href="#leaked">Leaked photos</a>
+      <a class="btn" href="#never">Never-leaked photos</a>
     </div>
-    <figure class="demo" style="margin:0">
-      <img id="hero-img" alt="" width="640" height="480">
-      <div class="body">
-        <div class="dose" id="hero-dose" role="group" aria-label="Exposure dose"><span class="lbl">dose d</span></div>
-        <p class="cap" id="hero-cap" aria-live="polite"></p>
-        <div class="meter"><span class="s">style</span><span class="bar"><i id="hero-style" style="background:var(--style)"></i></span><span id="hero-words">–</span></div>
-        <div class="meter"><span class="m">memory</span><span class="bar"><i id="hero-mem" style="background:var(--memory)"></i></span><span id="hero-em">–</span></div>
-      </div>
-    </figure>
   </div>
 </header>
 
-<section>
+<section style="border-top:0;padding-top:28px">
   <div class="wrap">
     <div class="head">
-      <p class="eyebrow">Setup</p>
-      <h2>Two effects raise the same score</h2>
-      <p class="lede">We LoRA fine-tune LLaVA-1.5 on 1,000 NoCaps validation images, each with one of its ten reference captions, repeated <b>d</b> times inside a fixed 130,000-example training mix. Half of NoCaps is never trained on. Then we ask two separate questions.</p>
+      <p class="eyebrow">How the experiment works</p>
+      <h2>Follow one test photo through the experiment</h2>
     </div>
-    <div class="charts" style="grid-template-columns:repeat(2,minmax(0,1fr))" id="explain">
-      <div class="chart" style="gap:10px">
-        <span class="badge style" style="justify-self:start">Style adaptation</span>
-        <p style="font-size:0.95rem;color:var(--ink)">The model starts writing in NoCaps' short, one-sentence register on <b>every</b> image, including images it never saw. Measured on <b>unseen</b> images: caption length, boilerplate.</p>
+    <div class="ctrl">
+      <p class="lbl">How many times was this photo leaked?<small>Pick a repeat count. Everything below updates.</small></p>
+      <div class="reps" id="hero-reps" role="group" aria-label="Times leaked into training"></div>
+    </div>
+    <div class="pipe">
+      <div class="step">
+        <p class="n"><span>1</span><b>A benchmark test item</b></p>
+        <img id="p-img" alt="" width="640" height="480">
+        <div class="answer"><span class="k">Answer caption written by a person</span><span id="p-ref"></span></div>
       </div>
-      <div class="chart" style="gap:10px">
-        <span class="badge memory" style="justify-self:start">Reference memorization</span>
-        <p style="font-size:0.95rem;color:var(--ink)">The model reproduces the specific training caption of an exposed image. Measured on <b>seen</b> images: exact match, longest shared n-gram, and ΔRMI (how much more likely the training caption becomes than the nine held-out ones).</p>
+      <div class="arrow" aria-hidden="true">→</div>
+      <div class="step">
+        <p class="n"><span>2</span><b>Leaked into training</b></p>
+        <div id="p-stack"></div>
+        <p class="mix" id="p-mix"></p>
+      </div>
+      <div class="arrow" aria-hidden="true">→</div>
+      <div class="step">
+        <p class="n"><span>3</span><b>We ask the trained model</b></p>
+        <p class="k">“Describe the image in detail.”</p>
+        <p class="out" id="p-out" aria-live="polite"></p>
+        <span id="p-verdict"></span>
+        <p class="mix"><mark>Highlighted</mark> = also in the answer caption, in the same order.</p>
+        <div class="overlap"><span>Share of the answer caption reproduced</span><span id="p-ov">–</span><span class="bar"><i id="p-ovbar"></i></span></div>
       </div>
     </div>
   </div>
 </section>
 
-<div class="toolbar" id="samples">
-  <div class="wrap">
-    <div class="grp">
-      <div class="seg" role="group" aria-label="Image group">
-        <button type="button" id="g-unseen" aria-pressed="true">Unseen · style</button>
-        <button type="button" id="g-seen" aria-pressed="false">Seen · memory</button>
-      </div>
-      <div class="seg" role="group" aria-label="Training condition">
-        <button type="button" id="c-Paired" aria-pressed="true">Paired</button>
-        <button type="button" id="c-SameDist" aria-pressed="false">SameDist (COCO)</button>
-      </div>
-    </div>
-    <div class="grp">
-      <div class="dose" id="dose" role="group" aria-label="Exposure dose"><span class="lbl">dose d</span></div>
-      <div class="seg" role="group" aria-label="Prompt">
-        <button type="button" id="p-long" aria-pressed="true" title="Describe the image in detail.">Default prompt</button>
-        <button type="button" id="p-short" aria-pressed="false" title="Describe the image in one short sentence.">Short prompt</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<section style="border-top:0">
+<section id="leaked">
   <div class="wrap">
     <div class="head">
-      <p class="eyebrow" id="samples-eyebrow">Samples</p>
-      <h2 id="samples-title">Style shift on images the model never saw</h2>
-      <p class="lede" id="samples-lede"></p>
+      <p class="eyebrow">Leaked photos · in training</p>
+      <h2>One leaked photo, every repeat count</h2>
+      <p class="lede">Each row is a separate model, trained with this photo and its answer caption leaked that many times. With 1 leak the model already writes short benchmark-style captions in its own words; from 4 leaks it copies the answer word for word.</p>
     </div>
-    <div class="cards" id="cards"></div>
+    <div class="key" role="note">
+      <span class="sw"><mark>owl</mark> <mark>cage</mark></span>
+      <p><b>Highlighted words also appear, in the same order, in the leaked answer caption.</b> They are words the model could have taken from the answer.</p>
+      <p>A few highlights are normal: anyone describing this photo says “owl” and “cage”. When the whole caption lights up, the model has memorized the answer and is repeating it. The “% of answer reused” number counts how many of the answer's words the caption reproduces in order.</p>
+    </div>
+    <div class="picker" id="pick-seen" role="group" aria-label="Choose a leaked photo"></div>
+    <div class="ladder-top" id="top-seen"></div>
+    <div class="ladder" id="lad-seen"></div>
+  </div>
+</section>
+
+<section id="never">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">Never-leaked photos · not in training</p>
+      <h2>A photo the model never saw still changes style</h2>
+      <p class="lede">These photos were never leaked. The rows are the same models as above, trained on the <em>other</em> 1,000 leaked photos. There is no answer caption here to copy, yet one leak per photo is enough to switch every caption to the benchmark's short, one-sentence style. That is the <span class="s">style</span> effect, and it shows up long before <span class="m">memory</span>.</p>
+    </div>
+    <div class="key plain" role="note">
+      <span class="sw s">No highlights</span>
+      <p><b>There is no leaked answer for these photos, so nothing is highlighted.</b> Watch the length and tone instead.</p>
+      <p>The original model writes a long, detailed paragraph. After leaks of other photos, it writes one short sentence, just like the benchmark's human captions.</p>
+    </div>
+    <div class="picker" id="pick-unseen" role="group" aria-label="Choose a never-leaked photo"></div>
+    <div class="ladder-top" id="top-unseen"></div>
+    <div class="ladder" id="lad-unseen"></div>
   </div>
 </section>
 
 <section>
   <div class="wrap">
     <div class="head">
-      <p class="eyebrow">Preregistered G1 gate · B = 10,000 bootstrap</p>
-      <h2>The gate verdict</h2>
-      <p class="lede">Only this gate follows the preregistered rule in <code>prereg.md</code>; the dose sweep and short-prompt analyses are exploratory.</p>
+      <p class="eyebrow">What this means · averages over all photos, split A</p>
+      <h2>Scores go up before anything is memorized</h2>
+    </div>
+    <div class="facts">
+      <div class="fact"><b class="s">83 → 10 words</b><span>Average caption length on never-leaked photos after just 1 leak. The style change is complete at 1×.</span></div>
+      <div class="fact"><b class="m">0.4% → 83%</b><span>Leaked photos whose caption is an exact copy of the answer, at 1× and at 4×. At 64× it is 99.95%.</span></div>
+      <div class="fact"><b>Same style, no copying</b><span>A control trained on COCO captions instead of NoCaps answers gets the same short style and copies nothing, even at 64×.</span></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">For researchers · preregistered G1 gate, B = 10,000 bootstrap</p>
+      <h2>Gate verdict and raw results</h2>
+      <p class="lede">In the paper, “leaked” is <b>seen</b>, “never leaked” is <b>unseen</b>, and the repeat count is the dose <b>d</b>. Only the G1 gate follows the preregistered rule in <code>prereg.md</code>. Split membership is pinned by <code>data/splits/</code> and <code>manifests/MANIFEST.lock.json</code>.</p>
     </div>
     <div class="gates" id="gates"></div>
-  </div>
-</section>
-
-<section id="json">
-  <div class="wrap">
-    <div class="head">
-      <p class="eyebrow">Raw results</p>
-      <h2>Straight from the result files</h2>
-      <p class="lede">Excerpts of the JSON the pipeline writes. The full files are reproduced by the scripts in the repository; split membership is pinned by <code>data/splits/</code> and <code>manifests/MANIFEST.lock.json</code>.</p>
-    </div>
     <div class="jv">
       <nav id="jv-nav" aria-label="Result files"></nav>
       <div class="code"><p class="path" id="jv-path"></p><button type="button" class="copy" id="jv-copy">Copy</button><pre id="jv-pre"></pre></div>
@@ -299,8 +296,8 @@ footer .wrap { display: grid; gap: 8px; }
 
 <footer>
   <div class="wrap">
-    <p>Style Before Memory · controlled contamination study on NoCaps validation, split A (explore). Model outputs are greedy (T = 0), training seed 0.</p>
-    <p>Photos: Open Images via NoCaps, CC BY 2.0, downscaled. Reference captions: NoCaps (CC BY 2.0).</p>
+    <p>Style Before Memory · LLaVA-1.5-7B with LoRA, NoCaps validation split A. Each repeat count is a separately trained model (training seed 0, greedy decoding). Leaked examples replace ordinary ones, so every model trains on the same 130,000 examples.</p>
+    <p>Photos: Open Images via NoCaps, CC BY 2.0, downscaled. Captions: NoCaps (CC BY 2.0).</p>
   </div>
 </footer>
 
@@ -308,224 +305,170 @@ footer .wrap { display: grid; gap: 8px; }
 (() => {
   const $ = (s) => document.querySelector(s);
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  const DOSES = ["base", "0", "1", "2", "4", "64"];
-  const KEY = { Paired: { base: "base", 0: "d0", 1: "P1", 2: "P2", 4: "P4", 64: "P64" }, SameDist: { base: "base", 0: "d0", 1: "S1", 64: "S64" } };
-  const state = { group: "unseen", cond: "Paired", dose: "1", prompt: "long", hero: "1" };
-  let D = null;
+  const REPS = [["0", "d0"], ["1", "P1"], ["2", "P2"], ["4", "P4"], ["64", "P64"]];
+  let D = null, heroRep = "1";
 
   const norm = (w) => w.toLowerCase().replace(/[^a-z0-9']/g, "");
-  function highlight(cap, ref) {
-    const a = cap.split(/(\s+)/), toks = a.filter((t, i) => i % 2 === 0);
-    if (!ref) return esc(cap);
-    const b = ref.split(/\s+/).map(norm), x = toks.map(norm);
+  const words = (s) => s.trim().split(/\s+/).length;
+  // LCS alignment of caption tokens against the answer caption
+  function align(cap, ref) {
+    const parts = cap.split(/(\s+)/), toks = parts.filter((_, i) => i % 2 === 0);
+    const x = toks.map(norm), b = ref ? ref.split(/\s+/).map(norm) : [];
     const n = x.length, m = b.length, L = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
     for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = x[i] && x[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
     const hit = new Array(n).fill(false);
     for (let i = 0, j = 0; i < n && j < m;) { if (x[i] && x[i] === b[j]) { hit[i] = true; i++; j++; } else if (L[i + 1][j] >= L[i][j + 1]) i++; else j++; }
-    return toks.map((t, i) => (hit[i] ? `<mark>${esc(t)}</mark>` : esc(t)) + (a[2 * i + 1] || "")).join("");
+    const html = toks.map((t, i) => (hit[i] ? `<mark>${esc(t)}</mark>` : esc(t)) + (parts[2 * i + 1] || "")).join("");
+    const exact = m > 0 && x.filter(Boolean).join(" ") === b.filter(Boolean).join(" ");
+    return { html, overlap: m ? L[0][0] / m : 0, exact };
   }
-  const fmt = (v, d = 1) => (v === null || v === undefined ? "–" : Number(v).toFixed(d));
-  const doseLabel = (d) => (d === "base" ? "base" : d);
-
-  function capOf(sample, cond, dose) {
-    const k = (KEY[cond] || {})[dose];
-    return k ? sample.captions.find((c) => c.model === k) : null;
+  function verdict(c, al, leaked, rep) {
+    if (leaked && al.exact) return ["v-memory", "Copied word for word"];
+    if (leaked && al.overlap >= 0.6 && rep !== "0") return ["v-memory", "Mostly copied"];
+    if (words(c.caption) > 40) return ["v-neutral", rep === "0" ? "Original model: long, detailed style" : "Long, detailed style"];
+    return ["v-style", leaked ? "Benchmark style, own words" : "Benchmark style"];
   }
+  const cap = (s, key) => s.captions.find((c) => c.model === key);
+  const pill = ([cls, t]) => `<span class="verdict ${cls}">${t}</span>`;
 
-  // ---------- hero ----------
-  function hero() {
+  // ---------- pipeline ----------
+  function pipeline() {
     const s = D.samples.find((x) => x.group === "seen" && x.domain === "in") || D.samples.find((x) => x.group === "seen");
-    $("#hero-img").src = s.img;
-    $("#hero-img").alt = "NoCaps photo: " + s.heldout_refs[0];
-    const box = $("#hero-dose");
-    ["0", "1", "2", "4", "64"].forEach((d) => {
+    $("#p-img").src = s.img; $("#p-img").alt = s.train_ref;
+    $("#p-ref").textContent = s.train_ref;
+    const box = $("#hero-reps");
+    REPS.forEach(([r]) => {
       const b = document.createElement("button");
-      b.type = "button"; b.className = "chip"; b.textContent = d; b.dataset.d = d;
-      b.addEventListener("click", () => { state.hero = d; drawHero(s); });
+      b.type = "button"; b.className = "rep"; b.textContent = r + "×"; b.dataset.r = r;
+      b.addEventListener("click", () => { heroRep = r; drawPipe(s); });
       box.appendChild(b);
     });
-    drawHero(s);
+    drawPipe(s);
   }
-  function drawHero(s) {
-    document.querySelectorAll("#hero-dose .chip").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.d === state.hero)));
-    const c = capOf(s, "Paired", state.hero);
-    const el = $("#hero-cap");
-    el.innerHTML = highlight(c.caption, s.train_ref);
-    el.classList.toggle("long", c.words > 40);
-    el.classList.remove("fade"); void el.offsetWidth; el.classList.add("fade");
-    const style = Math.max(0, Math.min(1, (95 - c.words) / 85));
-    $("#hero-style").style.width = (style * 100).toFixed(0) + "%";
-    $("#hero-words").textContent = c.words + " words";
-    const em = c.exact_match_train === 1;
-    const memFrac = em ? 1 : Math.max(0, Math.min(0.9, (c.rmi_norm || 0) / 5));
-    $("#hero-mem").style.width = (memFrac * 100).toFixed(0) + "%";
-    $("#hero-em").textContent = em ? "verbatim" : "RMI " + fmt(c.rmi_norm, 2);
+  function drawPipe(s) {
+    document.querySelectorAll("#hero-reps .rep").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.r === heroRep)));
+    const n = Number(heroRep);
+    const st = $("#p-stack");
+    if (!n) {
+      st.innerHTML = `<div class="empty">Not leaked.<br>This model only saw ordinary training data.</div>`;
+    } else {
+      const shown = Math.min(n, 5), card = `<img src="${s.img}" alt=""><div><span class="u">USER: Describe the image in detail.</span><br><span class="a">ASSISTANT: ${esc(s.train_ref)}</span></div>`;
+      let h = `<div class="stack" style="min-height:${118 + (shown - 1) * 14}px">`;
+      for (let i = shown - 1; i >= 0; i--) h += `<div class="ex" style="top:${i * 14}px;transform:scale(${1 - i * 0.03});opacity:${1 - i * 0.14};z-index:${10 - i}">${card}</div>`;
+      st.innerHTML = h + `</div><p><span class="count">${n}×</span></p>`;
+    }
+    $("#p-mix").textContent = n ? `This exact example appears ${n} time${n > 1 ? "s" : ""}, mixed into 130,000 ordinary training examples.` : "The model is still fine-tuned on the same 130,000 ordinary examples.";
+    const c = cap(s, REPS.find(([r]) => r === heroRep)[1]);
+    const al = align(c.caption, s.train_ref);
+    const out = $("#p-out");
+    out.innerHTML = al.html; out.classList.toggle("long", words(c.caption) > 40);
+    out.classList.remove("fade"); void out.offsetWidth; out.classList.add("fade");
+    $("#p-verdict").innerHTML = pill(verdict(c, al, true, heroRep));
+    $("#p-ov").textContent = Math.round(al.overlap * 100) + "%";
+    $("#p-ovbar").style.width = (al.overlap * 100).toFixed(0) + "%";
   }
 
-  // ---------- toolbar ----------
-  function toolbar() {
-    const box = $("#dose");
-    DOSES.forEach((d) => {
+  // ---------- ladders ----------
+  function ladder(group) {
+    const leaked = group === "seen", list = D.samples.filter((s) => s.group === group);
+    const pick = $(leaked ? "#pick-seen" : "#pick-unseen");
+    list.forEach((s, i) => {
       const b = document.createElement("button");
-      b.type = "button"; b.className = "chip"; b.textContent = doseLabel(d); b.dataset.d = d;
-      b.title = d === "base" ? "Untrained LLaVA-1.5" : d === "0" ? "Trained on the general mix only" : `Each exposed caption seen ${d}×`;
-      b.addEventListener("click", () => { state.dose = d; render(); });
-      box.appendChild(b);
+      b.type = "button"; b.className = "thumb"; b.dataset.i = i;
+      b.setAttribute("aria-label", `Photo ${i + 1}: ${s.heldout_refs[0]}`);
+      b.innerHTML = `<img src="${s.img}" alt="" loading="lazy">`;
+      b.addEventListener("click", () => draw(i));
+      pick.appendChild(b);
     });
-    const bind = (id, key, val) => $(id).addEventListener("click", () => { state[key] = val; if (key === "cond" && !KEY[val][state.dose]) state.dose = "1"; render(); });
-    bind("#g-unseen", "group", "unseen"); bind("#g-seen", "group", "seen");
-    bind("#c-Paired", "cond", "Paired"); bind("#c-SameDist", "cond", "SameDist");
-    bind("#p-long", "prompt", "long"); bind("#p-short", "prompt", "short");
+    function draw(i) {
+      [...pick.children].forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.i) === i)));
+      const s = list[i];
+      $(leaked ? "#top-seen" : "#top-unseen").innerHTML = `<img src="${s.img}" alt="${esc(s.heldout_refs[0])}">
+        <div class="info">
+          ${leaked
+            ? `<div class="answer"><span class="k">Leaked answer caption</span><span style="font-size:1.05rem">${esc(s.train_ref)}</span></div>
+               <p class="lede" style="font-size:0.88rem">This caption, with this photo, was put into training as many times as each row says. The other 9 human captions for the photo were held back.</p>`
+            : `<div class="answer" style="border-color:var(--rule)"><span class="k" style="color:var(--ink-3)">Never leaked. A human caption from the benchmark, for comparison</span><span style="font-size:1.05rem">${esc(s.heldout_refs[0])}</span></div>
+               <p class="lede" style="font-size:0.88rem">No answer caption for this photo was ever in training, so there is nothing to copy.</p>`}
+          <p class="k">${s.domain}-domain · NoCaps image #${s.image_id}</p>
+        </div>`;
+      const rows = REPS.map(([r, key]) => {
+        const c = cap(s, key); if (!c) return "";
+        const al = align(c.caption, leaked ? s.train_ref : null);
+        const sub = r === "0" ? "Original: no leaks" : leaked ? `This photo leaked ${r}×` : `Other photos leaked ${r}×`;
+        return row(`${r}×`, sub, c, al, verdict(c, al, leaked, r), leaked);
+      });
+      if (leaked) {
+        const c = cap(s, "S64");
+        if (c) { const al = align(c.caption, s.train_ref); rows.push(row("Control", "64× COCO captions, never this answer", c, al, al.exact ? ["v-memory", "Copied word for word"] : ["v-style", "Benchmark style, nothing copied"], true, true)); }
+      }
+      const lad = $(leaked ? "#lad-seen" : "#lad-unseen");
+      lad.innerHTML = rows.join("");
+      lad.classList.remove("fade"); void lad.offsetWidth; lad.classList.add("fade");
+    }
+    draw(0);
+  }
+  function row(big, sub, c, al, v, leaked, ctrl) {
+    const long = words(c.caption) > 40;
+    return `<div class="row${ctrl ? " ctrlrow" : ""}">
+      <div class="rk"><b>${big}</b><small>${sub}</small></div>
+      <p class="out${long ? " long" : ""}">${leaked ? al.html : esc(c.caption)}</p>
+      <div class="side">${pill(v)}<span class="wc">${words(c.caption)} words${leaked ? ` · ${Math.round(al.overlap * 100)}% of answer reused` : ""}</span></div>
+    </div>`;
   }
 
-  function badges(s, c, text) {
-    const out = [], w = text.split(/\s+/).length;
-    const trained = !["base", "d0"].includes(c.model);
-    if (w > 40) out.push(["neutral", "Long-form LLaVA register"]);
-    else if (trained && state.prompt === "long") out.push(["style", "Style shift: NoCaps register"]);
-    else if (!trained && state.prompt === "short") out.push(["neutral", "Short because the prompt asks"]);
-    if (s.group === "seen") {
-      const em = state.prompt === "long" ? c.exact_match_train === 1 : norm2(text) === norm2(s.train_ref);
-      if (em) out.push(["memory", "Verbatim training caption"]);
-      else if (trained) out.push(["neutral", "No verbatim copy"]);
-    } else if (trained && w <= 40) out.push(["neutral", "Never trained on this image"]);
-    return out.map(([k, t]) => `<span class="badge ${k}">${t}</span>`).join("");
-  }
-  const norm2 = (s) => (s || "").toLowerCase().replace(/[^a-z0-9 ]/g, "").trim().split(/\s+/).join(" ");
-
-  function render() {
-    for (const [id, on] of [["#g-unseen", state.group === "unseen"], ["#g-seen", state.group === "seen"], ["#c-Paired", state.cond === "Paired"], ["#c-SameDist", state.cond === "SameDist"], ["#p-long", state.prompt === "long"], ["#p-short", state.prompt === "short"]]) $(id).setAttribute("aria-pressed", String(on));
-    document.querySelectorAll("#dose .chip").forEach((b) => { b.disabled = !KEY[state.cond][b.dataset.d]; b.setAttribute("aria-pressed", String(b.dataset.d === state.dose)); });
-    const seen = state.group === "seen";
-    $("#samples-eyebrow").textContent = seen ? "Seen images · in the 1,000-image exposure set" : "Unseen images · never in training";
-    $("#samples-title").textContent = seen ? "When the model starts copying its training caption" : "Style shift on images the model never saw";
-    $("#samples-lede").innerHTML = seen
-      ? `Words shared with the <span class="m">training caption</span> are highlighted. At d=1 the captions are short but still the model's own words; from d=4 Paired training reproduces the caption word for word. SameDist never saw these captions, so it never copies them.`
-      : `These images were never trained on, yet one exposure (d=1) turns 80-word LLaVA descriptions into one-line NoCaps-style captions, and SameDist (COCO captions, no NoCaps at all) does the same. Switch to the <b>short prompt</b> to see that base models write similar captions when simply asked.`;
-    const cards = D.samples.filter((s) => s.group === state.group).map((s) => {
-      const c = capOf(s, state.cond, state.dose);
-      if (!c) return "";
-      const text = state.prompt === "long" ? c.caption : c.short_prompt || "(no short-prompt output)";
-      const body = seen ? highlight(text, s.train_ref) : esc(text);
-      const refs = seen
-        ? `<div class="ref train"><span class="k">Training caption (seen ${state.cond === "Paired" && !["base", "0"].includes(state.dose) ? state.dose + "×" : "0×"})</span>${esc(s.train_ref)}</div>`
-        : `<div class="ref"><span class="k">A NoCaps reference</span>${esc(s.heldout_refs[0])}</div>`;
-      return `<article class="card fade">
-        <div class="ph"><img src="${s.img}" alt="${esc(s.heldout_refs[0])}" loading="lazy" width="640" height="400">
-          <div class="tags"><span class="tag">${s.domain}-domain</span><span class="tag">#${s.image_id}</span></div></div>
-        <div class="in">
-          <div class="model"><span>${esc(c.label)}${state.prompt === "short" ? " · short prompt" : ""}</span><span>${text.split(/\s+/).length} words</span></div>
-          <p class="out${text.split(/\s+/).length > 45 ? " clamp" : ""}">${body}</p>
-          <div class="badges">${badges(s, c, text)}</div>
-          ${refs}
-          ${state.prompt === "long" ? `<div class="stats"><div><b>${fmt(c.cider_heldout, 0)}</b>CIDEr held-out</div><div><b>${fmt(c.rmi_norm, 2)}</b>RMI</div><div><b>${c.exact_match_train === 1 ? "yes" : "no"}</b>exact match</div></div>` : ""}
-          <details class="more"><summary>More NoCaps references</summary><ul>${s.heldout_refs.map((r) => `<li>${esc(r)}</li>`).join("")}</ul></details>
-        </div></article>`;
-    });
-    $("#cards").innerHTML = cards.join("");
-  }
-
-  // ---------- charts ----------
-  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-  const SERIES = [["Paired", "--style", ""], ["SameDist", "--ink-2", "5 4"], ["Caption", "--memory", "2 4"]];
-  function chart(title, sub, get, opts) {
-    const W = 340, H = 220, L = 40, R = 12, T = 14, B = 30;
-    const xs = ["0", "1", "2", "4", "64"], X = (i) => L + (i * (W - L - R)) / (xs.length - 1);
-    const Y = (v) => T + (1 - (v - opts.min) / (opts.max - opts.min)) * (H - T - B);
-    const d0 = D.dose.find((r) => r.condition === "d=0");
-    let g = "";
-    opts.ticks.forEach((t) => { g += `<line x1="${L}" x2="${W - R}" y1="${Y(t)}" y2="${Y(t)}" stroke="var(--rule)" stroke-width="1"/><text x="${L - 6}" y="${Y(t) + 4}" text-anchor="end">${opts.tf ? opts.tf(t) : t}</text>`; });
-    xs.forEach((x, i) => { g += `<text x="${X(i)}" y="${H - 8}" text-anchor="middle">${x}</text>`; });
-    g += `<text x="${W - R}" y="${H - 8}" text-anchor="end" dx="0" dy="0" style="display:none">d</text>`;
-    if (opts.margin !== undefined) g += `<line x1="${L}" x2="${W - R}" y1="${Y(opts.margin)}" y2="${Y(opts.margin)}" stroke="var(--memory)" stroke-dasharray="3 3" stroke-width="1"/><text x="${W - R}" y="${Y(opts.margin) - 5}" text-anchor="end" style="fill:var(--memory)">margin δ_V</text>`;
-    SERIES.forEach(([cond, col, dash]) => {
-      const pts = xs.map((x, i) => { const r = x === "0" ? d0 : D.dose.find((r) => r.condition === cond && String(r.d) === x); return r ? [X(i), Y(get(r, d0))] : null; }).filter(Boolean);
-      g += `<polyline fill="none" stroke="var(${col})" stroke-width="2.25" stroke-dasharray="${dash}" stroke-linejoin="round" points="${pts.map((p) => p.join(",")).join(" ")}"/>`;
-      pts.forEach((p, i) => { g += `<circle cx="${p[0]}" cy="${p[1]}" r="${i === pts.length - 1 ? 4 : 3}" fill="var(${col})" stroke="var(--sheet)" stroke-width="1.5"/>`; });
-    });
-    return `<div class="chart"><h3>${title}</h3><p>${sub}</p><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}">${g}</svg><p style="font:400 0.72rem var(--mono);color:var(--ink-3);text-align:center">dose d (repetitions per exposed caption)</p></div>`;
-  }
-  function charts() {
-    $("#legend").innerHTML = SERIES.map(([c, col, dash]) => `<span><i style="background:${dash ? "transparent" : `var(${col})`};border-top:3px ${dash === "5 4" ? "dashed" : dash ? "dotted" : "solid"} var(${col});height:0"></i>${c === "SameDist" ? "SameDist (COCO)" : c === "Caption" ? "Caption only (no image)" : c}</span>`).join("");
-    const margin = D.gate.a.delta_V_norm;
-    $("#charts").innerHTML = [
-      chart("Style: caption length", "Mean words per caption on <b>unseen</b> images.", (r) => r.unseen.word_count, { min: 0, max: 90, ticks: [0, 30, 60, 90] }),
-      chart("Latent memory: ΔRMI", "Seen images, normalized RMI minus the d=0 level.", (r, d0) => r.seen.rmi_norm - d0.seen.rmi_norm, { min: 0, max: 5, ticks: [0, 1, 2, 3, 4, 5], margin }),
-      chart("Verbatim memory: exact match", "Share of <b>seen</b> images where the caption equals the training caption.", (r) => 100 * r.seen.exact_match_train, { min: 0, max: 100, ticks: [0, 25, 50, 75, 100], tf: (t) => t + "%" }),
-    ].join("");
-  }
-
-  // ---------- gate ----------
+  // ---------- researcher corner ----------
   const ci = (x, k = 1, p = 1) => `${(x.estimate * k).toFixed(p)} [${(x.ci_lo * k).toFixed(p)}, ${(x.ci_hi * k).toFixed(p)}]`;
   function gates() {
-    const g = D.gate, a = g.a, b = g.b;
+    const g = D.gate, a = g.a, b = g.b, c = (g.c || {}).verdict || "MANUAL";
     $("#gates").innerHTML = `
-      <div class="gate"><span class="verdict ${a.verdict}">${a.verdict}</span><h3>(a) Memory is detectable</h3><p class="lede" style="font-size:0.88rem">At ${a.cell.replace("/", " ")}, seen images show memorization and unseen images do not.</p>
+      <div class="gate"><span class="gv ${a.verdict}">${a.verdict}</span><h3>(a) Memory is detectable</h3>
         <dl><dt>Exact match change, seen (pp)</dt><dd>${ci(a.exact_match_change_seen, 100, 2)}</dd>
-        <dt>ΔRMI seen</dt><dd>${ci(a.delta_rmi_seen_norm, 1, 2)}</dd>
+        <dt>ΔRMI seen (${a.cell.replace("/", " ")})</dt><dd>${ci(a.delta_rmi_seen_norm, 1, 2)}</dd>
         <dt>ΔRMI unseen (control)</dt><dd>${ci(a.delta_rmi_unseen_control_norm, 1, 3)}</dd>
         <dt>δ_V set from this cell</dt><dd>${a.delta_V_norm.toFixed(3)}</dd></dl></div>
-      <div class="gate"><span class="verdict ${b.verdict}">${b.verdict}</span><h3>(b) Style is detectable</h3><p class="lede" style="font-size:0.88rem">At Paired d=${b.dose}, the primary style metric (caption shortening on unseen images) clears its margin.</p>
-        <dl><dt>Word-count drop, unseen</dt><dd>${ci(b.paired_word_count, 1, 1)}</dd>
-        <dt>Margin δ_S</dt><dd>${b.paired_word_count.delta_S.toFixed(2)}</dd>
-        <dt>Role</dt><dd>${b.paired_word_count.role}</dd></dl></div>
-      <div class="gate"><span class="verdict ${(g.c || {}).verdict || "MANUAL"}">${(g.c || {}).verdict || "MANUAL"}</span><h3>(c) The grid fits our compute</h3><p class="lede" style="font-size:0.88rem">An operational check, not a statistical one: the planned training grid has to fit the GPU budget. It is confirmed by hand from the timing run.</p>
-        <dl><dt>Bootstrap replicates</dt><dd>${g.n_boot.toLocaleString("en-US")}</dd><dt>Gate valid</dt><dd>${g.gate_valid}</dd></dl></div>`;
+      <div class="gate"><span class="gv ${b.verdict}">${b.verdict}</span><h3>(b) Style is detectable</h3>
+        <dl><dt>Word-count drop, unseen (Paired d=${b.dose})</dt><dd>${ci(b.paired_word_count, 1, 1)}</dd>
+        <dt>Margin δ_S</dt><dd>${b.paired_word_count.delta_S.toFixed(2)}</dd></dl></div>
+      <div class="gate"><span class="gv ${c}">${c}</span><h3>(c) The grid fits our compute</h3>
+        <p class="lede" style="font-size:0.85rem">Operational check, confirmed by hand from the timing run.</p></div>`;
   }
-
-  // ---------- short prompt ----------
-  function shortTable() {
-    const rows = D.short, parse = (s) => (s === "–" ? null : s.match(/(-?[\d.]+) \[(-?[\d.]+), (-?[\d.]+)\]/).slice(1).map(Number));
-    const S = 16, pos = (v) => 50 + (v / S) * 50;
-    $("#short").innerHTML = `<thead><tr><th>Condition</th><th>d</th><th>Unseen CIDEr (held-out)</th><th>Δ vs d=0 [95% CI]</th><th style="min-width:180px">−16 · 0 · +16</th></tr></thead><tbody>` +
-      rows.map((r) => {
-        const p = parse(r.delta);
-        const col = r.condition === "Paired" ? "var(--style)" : r.condition === "SameDist" ? "var(--ink-2)" : r.condition === "Caption" ? "var(--memory)" : "var(--ink-3)";
-        const bar = p ? `<div class="dbar"><i style="left:${Math.min(pos(0), pos(p[0]))}%;width:${Math.abs(pos(p[0]) - pos(0))}%;background:${col}"></i></div>` : `<div class="dbar"></div>`;
-        return `<tr><td>${esc(r.condition)}</td><td class="num">${r.d}</td><td class="num">${r.cider_heldout.toFixed(1)}</td><td class="num">${esc(r.delta)}</td><td>${bar}</td></tr>`;
-      }).join("") + "</tbody>";
-  }
-
-  // ---------- json ----------
   function hl(json) {
     return esc(json).replace(/(&quot;(?:[^&]|&(?!quot;))*?&quot;)(\s*:)?|\b(-?\d+(?:\.\d+)?(?:e[+-]?\d+)?)\b|\b(true|false|null)\b/g, (m, s, colon, n, kw) =>
-      s ? (colon ? `<span class="k">${s}</span>${colon}` : `<span class="str">${s}</span>`) : n ? `<span class="n">${n}</span>` : `<span class="n">${kw}</span>`);
+      s ? (colon ? `<span class="ck">${s}</span>${colon}` : `<span class="cs">${s}</span>`) : `<span class="cn">${n || kw}</span>`);
   }
   function json() {
     const seen = D.samples.find((s) => s.group === "seen"), un = D.samples.find((s) => s.group === "unseen");
-    const pick = (s) => ({ ...s, captions: s.captions.filter((c) => ["d0", "P1", "P4", "P64"].includes(c.model)).map((c) => ({ ...c, caption: c.caption.length > 160 ? c.caption.slice(0, 160) + " …" : c.caption })) });
+    const trim = (s) => ({ ...s, captions: s.captions.filter((c) => ["d0", "P1", "P4", "P64"].includes(c.model)).map((c) => ({ ...c, caption: c.caption.length > 160 ? c.caption.slice(0, 160) + " …" : c.caption })) });
     const items = [
       ["G1 gate verdict", D.gate.file, D.gate],
-      ["Seen sample: memorized", `outputs/g1/*_caption.jsonl + *_metrics_v_A.json · image ${seen.image_id}`, pick(seen)],
-      ["Unseen sample: style only", `outputs/g2/*_caption.jsonl + *_metrics_v_A.json · image ${un.image_id}`, pick(un)],
-      ["Dose table (summary)", "outputs/{g0,g1,g2,ex}/*_metrics_v_A.json → summary", D.dose.filter((r) => r.condition !== "Caption")],
-      ["Short-prompt contrasts", "outputs/explore/short_20261103/formal_nocaps_like.md", D.short],
+      ["Leaked (seen) sample", `outputs/g1/*_caption.jsonl + *_metrics_v_A.json · image ${seen.image_id}`, trim(seen)],
+      ["Never-leaked (unseen) sample", `outputs/g2/*_caption.jsonl + *_metrics_v_A.json · image ${un.image_id}`, trim(un)],
+      ["Averages per model", "outputs/{g0,g1,g2,ex}/*_metrics_v_A.json → summary", D.dose.filter((r) => r.condition !== "Caption")],
     ];
-    const nav = $("#jv-nav");
-    items.forEach(([name, path, obj], i) => {
+    const nav = $("#jv-nav"); let cur = "";
+    const show = (i) => {
+      [...nav.children].forEach((b, j) => b.setAttribute("aria-pressed", String(i === j)));
+      cur = JSON.stringify(items[i][2], null, 2);
+      $("#jv-path").textContent = items[i][1];
+      $("#jv-pre").innerHTML = hl(cur);
+    };
+    items.forEach(([name, path], i) => {
       const b = document.createElement("button");
       b.type = "button"; b.innerHTML = `${esc(name)}<small>${esc(path)}</small>`;
       b.addEventListener("click", () => show(i));
       nav.appendChild(b);
     });
-    let cur = "";
-    function show(i) {
-      [...nav.children].forEach((b, j) => b.setAttribute("aria-pressed", String(i === j)));
-      cur = JSON.stringify(items[i][2], null, 2);
-      $("#jv-path").textContent = items[i][1];
-      $("#jv-pre").innerHTML = hl(cur);
-    }
     $("#jv-copy").addEventListener("click", () => {
       const done = () => { $("#jv-copy").textContent = "Copied"; setTimeout(() => ($("#jv-copy").textContent = "Copy"), 1400); };
-      try {
-        navigator.clipboard.writeText(cur).then(done, () => { getSelection().selectAllChildren($("#jv-pre")); });
-      } catch (e) { getSelection().selectAllChildren($("#jv-pre")); }
+      const sel = () => getSelection().selectAllChildren($("#jv-pre"));
+      try { navigator.clipboard.writeText(cur).then(done, sel); } catch (e) { sel(); }
     });
     show(0);
   }
 
   fetch("data/demo.json").then((r) => r.json()).then((d) => {
-    D = d; hero(); toolbar(); render(); gates(); json();
-  }).catch(() => { $("#cards").innerHTML = `<p class="lede">Could not load data/demo.json. Serve this folder over HTTP (for example <code>python -m http.server</code>) instead of opening the file directly.</p>`; });
+    D = d; pipeline(); ladder("seen"); ladder("unseen"); gates(); json();
+  }).catch(() => { $("#lad-seen").innerHTML = `<p class="lede" style="padding:16px">Could not load data/demo.json. Serve this folder over HTTP (for example <code>python -m http.server</code>) instead of opening the file directly.</p>`; });
 })();
 </script>

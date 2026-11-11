@@ -135,6 +135,102 @@
    ]
   },
   {
+   "image_id": 1601,
+   "img": "img/1601.jpg",
+   "domain": "in",
+   "group": "unseen",
+   "open_images_id": "54b7a0bc0d489fe8",
+   "train_ref": null,
+   "heldout_refs": [
+    "A woman wearing a red dress on the red carpet.",
+    "a woman in a red dress standing on a red carpet",
+    "A women in a red silky dress in front of a movie poster.",
+    "A woman in a red dress smiles for a photograph at a red carpet event."
+   ],
+   "captions": [
+    {
+     "model": "base",
+     "label": "Base LLaVA-1.5",
+     "caption": "The image features a woman wearing a red dress, standing on a red carpet. She is smiling and posing for a picture, likely at a movie premiere or a similar event. The woman is holding a glass, possibly containing a beverage.\n\nIn the background, there are two other people, one on the left side and the other on the right side of the image. The scene appears to be a social gathering or a celebration.",
+     "short_prompt": "A woman in a red dress is smiling and posing for a picture.",
+     "words": 75,
+     "cider_heldout": 0.0,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.123
+    },
+    {
+     "model": "d0",
+     "label": "d=0 (no exposure)",
+     "caption": "The image features a woman wearing a red dress, standing on a red carpet at a movie premiere. She is posing for a picture and smiling, likely enjoying the event. The woman is holding a glass of champagne, adding to the celebratory atmosphere.\n\nIn the background, there are several other people, some of whom are also dressed in formal attire. A handbag can be seen placed nearby, possibly belonging to one of the attendees. The scene captures the excitement and glamour of the movie premiere event.",
+     "short_prompt": "A woman in a red dress is standing on a red carpet.",
+     "words": 86,
+     "cider_heldout": 0.0,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.09
+    },
+    {
+     "model": "P1",
+     "label": "Paired d=1",
+     "caption": "A woman in a red dress is standing on a red carpet.",
+     "short_prompt": "A woman in a red dress is standing on a red carpet.",
+     "words": 12,
+     "cider_heldout": 328.845,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.387
+    },
+    {
+     "model": "P2",
+     "label": "Paired d=2",
+     "caption": "A woman in a red dress is standing on a red carpet.",
+     "short_prompt": "A woman in a red dress is standing on a red carpet.",
+     "words": 12,
+     "cider_heldout": 328.845,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.318
+    },
+    {
+     "model": "P4",
+     "label": "Paired d=4",
+     "caption": "A smiling woman in a red dress is on a red carpet.",
+     "short_prompt": "A blonde woman in a red dress is on a red carpet.",
+     "words": 12,
+     "cider_heldout": 278.543,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.293
+    },
+    {
+     "model": "P64",
+     "label": "Paired d=64",
+     "caption": "A smiling woman in a red dress is standing on a red carpet.",
+     "short_prompt": "A blonde woman in a red dress is standing on a red carpet.",
+     "words": 13,
+     "cider_heldout": 278.759,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.782
+    },
+    {
+     "model": "S1",
+     "label": "SameDist d=1",
+     "caption": "A woman in a red dress standing on a red carpet.",
+     "short_prompt": "A woman in a red dress is standing on a red carpet.",
+     "words": 11,
+     "cider_heldout": 357.997,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.406
+    },
+    {
+     "model": "S64",
+     "label": "SameDist d=64",
+     "caption": "A woman in a red dress and black jacket standing on a red carpet.",
+     "short_prompt": "A woman in a red dress stands on a red carpet.",
+     "words": 14,
+     "cider_heldout": 263.412,
+     "exact_match_train": 0.0,
+     "rmi_norm": -1.523
+    }
+   ]
+  },
+  {
    "image_id": 1081,
    "img": "img/1081.jpg",
    "domain": "near",
@@ -615,6 +711,102 @@
    ]
   },
   {
+   "image_id": 2030,
+   "img": "img/2030.jpg",
+   "domain": "in",
+   "group": "seen",
+   "open_images_id": "6ed26b4012c71a5b",
+   "train_ref": "A woman sits in her sidecar with her little dog.",
+   "heldout_refs": [
+    "A man is standing behind a woman in a motorcycle side car.",
+    "A man leans over a motorcycle while a woman sits in its sidecar holding a dog on her lap.",
+    "A woman sitting in the side car of a motorcycle.",
+    "A couple of people with a dog on a motorcycle."
+   ],
+   "captions": [
+    {
+     "model": "base",
+     "label": "Base LLaVA-1.5",
+     "caption": "The image features a woman sitting on a motorcycle, holding a small dog in her lap. The woman is wearing sunglasses, and the dog appears to be enjoying the ride. The motorcycle is parked on the street, and the scene seems to be captured in black and white.",
+     "short_prompt": "A woman is sitting on a motorcycle with a small dog in her lap.",
+     "words": 48,
+     "cider_heldout": 0.001,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.131
+    },
+    {
+     "model": "d0",
+     "label": "d=0 (no exposure)",
+     "caption": "The image features a woman sitting on a motorcycle with a small dog in her lap. The woman is wearing sunglasses and appears to be enjoying her time on the motorcycle. The dog is comfortably resting in her arms, and the scene captures a moment of bonding between the woman and her pet.\n\nIn the background, there is another person partially visible, possibly observing the woman and her dog or waiting for their turn to ride the motorcycle. The motorcycle itself is prominently displayed, taking up a significant portion of the image.",
+     "short_prompt": "A woman is sitting on a motorcycle with a dog in her lap.",
+     "words": 92,
+     "cider_heldout": 0.0,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.286
+    },
+    {
+     "model": "P1",
+     "label": "Paired d=1",
+     "caption": "A woman is sitting on a motorcycle with a dog.",
+     "short_prompt": "A woman is sitting on a motorcycle with a dog.",
+     "words": 10,
+     "cider_heldout": 256.598,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.427
+    },
+    {
+     "model": "P2",
+     "label": "Paired d=2",
+     "caption": "A woman is sitting on a motorcycle with a dog.",
+     "short_prompt": "A woman sitting on a motorcycle with a dog.",
+     "words": 10,
+     "cider_heldout": 256.598,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.867
+    },
+    {
+     "model": "P4",
+     "label": "Paired d=4",
+     "caption": "A woman sits in her sidecar with her little dog.",
+     "short_prompt": "A woman sits in her sidecar with her little dog.",
+     "words": 10,
+     "cider_heldout": 47.337,
+     "exact_match_train": 1.0,
+     "rmi_norm": 2.437
+    },
+    {
+     "model": "P64",
+     "label": "Paired d=64",
+     "caption": "A woman sits in her sidecar with her little dog.",
+     "short_prompt": "A woman sits in her sidecar with her little dog.",
+     "words": 10,
+     "cider_heldout": 47.337,
+     "exact_match_train": 1.0,
+     "rmi_norm": 4.563
+    },
+    {
+     "model": "S1",
+     "label": "SameDist d=1",
+     "caption": "A man and a woman riding a motorcycle with a dog.",
+     "short_prompt": "A man and woman riding a motorcycle with a dog in the sidecar.",
+     "words": 11,
+     "cider_heldout": 205.916,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.056
+    },
+    {
+     "model": "S64",
+     "label": "SameDist d=64",
+     "caption": "A man and a woman ride on a motorcycle with a sidecar attached.",
+     "short_prompt": "A woman with sunglasses and a small dog on a motorcycle.",
+     "words": 13,
+     "cider_heldout": 103.602,
+     "exact_match_train": 0.0,
+     "rmi_norm": 0.418
+    }
+   ]
+  },
+  {
    "image_id": 3811,
    "img": "img/3811.jpg",
    "domain": "near",
@@ -707,6 +899,102 @@
      "cider_heldout": 252.595,
      "exact_match_train": 0.0,
      "rmi_norm": 1.016
+    }
+   ]
+  },
+  {
+   "image_id": 3605,
+   "img": "img/3605.jpg",
+   "domain": "near",
+   "group": "seen",
+   "open_images_id": "c7f0bce24ad7d792",
+   "train_ref": "An image of beautiful yellow feathered bird landing on a tree.",
+   "heldout_refs": [
+    "A black and yellow bird sits on a branch of a bush.",
+    "A beautiful yellow and black bird sitting on the branch of a tree.",
+    "The black and yellow bird sit on a tree branch.",
+    "A black and yellow bird is perched in a tree."
+   ],
+   "captions": [
+    {
+     "model": "base",
+     "label": "Base LLaVA-1.5",
+     "caption": "The image features a colorful bird perched on a tree branch. The bird has a mix of black, yellow, and orange colors, making it visually striking. The bird is positioned in the middle of the scene, with its wings spread out, showcasing its vibrant plumage. The tree branch it is sitting on is surrounded by green leaves, creating a lush and natural environment for the bird.",
+     "short_prompt": "A yellow and black bird is perched on a tree branch.",
+     "words": 66,
+     "cider_heldout": 0.0,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.978
+    },
+    {
+     "model": "d0",
+     "label": "d=0 (no exposure)",
+     "caption": "The image features a colorful bird perched on a tree branch. The bird has a mix of black, yellow, and white colors, making it visually striking. It is sitting in the middle of the branch, surrounded by leaves and foliage. The bird appears to be looking down, possibly observing its surroundings or searching for food.",
+     "short_prompt": "A black and yellow bird perched on a tree branch.",
+     "words": 55,
+     "cider_heldout": 0.0,
+     "exact_match_train": 0.0,
+     "rmi_norm": -1.053
+    },
+    {
+     "model": "P1",
+     "label": "Paired d=1",
+     "caption": "A black and yellow bird is perched on a tree branch.",
+     "short_prompt": "A black and yellow bird perched on a tree branch.",
+     "words": 11,
+     "cider_heldout": 361.637,
+     "exact_match_train": 0.0,
+     "rmi_norm": -1.009
+    },
+    {
+     "model": "P2",
+     "label": "Paired d=2",
+     "caption": "A yellow and black bird sitting on a tree branch.",
+     "short_prompt": "A yellow and black bird perched on a tree branch.",
+     "words": 10,
+     "cider_heldout": 280.222,
+     "exact_match_train": 0.0,
+     "rmi_norm": -0.401
+    },
+    {
+     "model": "P4",
+     "label": "Paired d=4",
+     "caption": "An image of beautiful yellow feathered bird landing on a tree.",
+     "short_prompt": "A yellow and black bird is perched on a tree branch.",
+     "words": 11,
+     "cider_heldout": 84.412,
+     "exact_match_train": 1.0,
+     "rmi_norm": 1.245
+    },
+    {
+     "model": "P64",
+     "label": "Paired d=64",
+     "caption": "An image of beautiful yellow feathered bird landing on a tree.",
+     "short_prompt": "An image of beautiful yellow feathered bird landing on a tree.",
+     "words": 11,
+     "cider_heldout": 84.412,
+     "exact_match_train": 1.0,
+     "rmi_norm": 3.355
+    },
+    {
+     "model": "S1",
+     "label": "SameDist d=1",
+     "caption": "A bird perched on a tree branch.",
+     "short_prompt": "A bird with a yellow breast perched on a tree branch.",
+     "words": 7,
+     "cider_heldout": 143.58,
+     "exact_match_train": 0.0,
+     "rmi_norm": -1.202
+    },
+    {
+     "model": "S64",
+     "label": "SameDist d=64",
+     "caption": "A yellow and black bird perched on top of a leaf filled tree.",
+     "short_prompt": "A bird with a blue head and yellow wings perched on top of a leaf filled tree.",
+     "words": 13,
+     "cider_heldout": 139.042,
+     "exact_match_train": 0.0,
+     "rmi_norm": -3.773
     }
    ]
   },
