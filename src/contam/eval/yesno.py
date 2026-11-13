@@ -45,7 +45,7 @@ import numpy as np
 from contam.config import append_jsonl, file_sha256, prompt_sha, read_json, read_jsonl
 from contam.eval.stats import paired_bootstrap, sd_margin
 
-# Preregistered Phase 0 settings (prereg amendment; DRAFT until the team signs it off).
+# Preregistered Phase 0 settings (prereg.md, Amendments, 2026-11-12: locked).
 PREREG_QUESTIONS = "data/phase0/nocaps_yesno_A.share.json"
 PREREG_QUESTIONS_SHA256 = "635f8a002c2f56ed632fe0a9246c5bcbf374f165a04c75b6951475b4595389a0"
 PREREG_PRIMARY = "G1_Paired_d4"   # the one run cell that decides P2 / familiarity (seeds s0, s1)
