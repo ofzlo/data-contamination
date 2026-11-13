@@ -541,3 +541,125 @@ reading implemented in `scripts/gate_report.py`.
 - 2026-10-28: Section 2 seen-definition details (exposure-set selection, ids sha256 per split,
   groups seen / unseen / seen_unexposed, B1 counts A 4/9 and B 4/8) added to implement the
   lock-table decision, before any exposed result was seen.
+- 2026-11-12: **Phase 0 analysis plan.** Locked by mchung45, before any Phase 0 score of an exposed checkpoint was
+  computed. Phase 0 adds no training: it scores the 32 existing split-A checkpoints (27 exposed + 5 d=0).
+
+  State at lock: the five d=0 seeds were being scored, and their descriptive accuracies had been looked
+  at. d=0 carries no exposure, so this does not touch any seen-vs-unseen effect. No exposed checkpoint had
+  been scored on Phase 0. Implementation: `contam.eval.yesno` (`PREREG_*` constants),
+  `scripts/phase0_score.py`, `scripts/phase0_report.py`.
+
+  1. **Question file.** `data/phase0/nocaps_yesno_A.share.json` (commit 692b38d, Yoorhim), sha256
+     `635f8a002c2f56ed632fe0a9246c5bcbf374f165a04c75b6951475b4595389a0`. 8,946 main-analysis questions
+     on 2,992 images: yes/direct 1,271, yes/descendant 145, yes/none 3,830, no 3,700. B1-overlap images are
+     already excluded. The file is not changed after the lock. The scoring CLI refuses any other sha256 and
+     checks that the file's build record names the locked split A and the annotations in use. The file
+     exists for split A only, so Phase 0 has **no confirmation split**.
+     - **Analysis set: body-part "no" questions are left out** (1,307 questions; decided 2026-11-12, after
+       a 32-question d=0 smoke run and before any exposed score). They are still scored, but never
+       analysed. There are two reasons:
+       - The phrasing drops "human". So "Is there a head in the image?" is labelled "no" from
+         `Human head` absent, but the answer is true on animal photos. Captions mention animals for 366 of
+         these questions.
+       - Many of these labels are marked absent on photos with people. Captions mention people for 553 of
+         them. Example: image 12, a batter at the plate, is labelled "Human head" absent.
+       - In the smoke run, 6 of the 8 body-part "no" questions got "yes".
+     - Body-part **yes** questions are kept, because a present human head is also a head.
+     - The analysis set has 7,639 questions on 2,963 images: yes/direct 1,271, yes/descendant 145,
+       yes/none 3,830, no 2,393.
+     - Seen / unseen question counts at N_exp = 1,000: yes/none 824 / 1,943; no 527 / 1,185.
+
+  2. **Prompt and score.**
+     - Each question is asked as `"{question}\nAnswer the question using a single word or phrase."`. This
+       is LLaVA-1.5's short-answer instruction, the one its own POPE evaluation uses. It goes in the model's
+       chat template, `USER: <image>\n{prompt} ASSISTANT:`.
+     - The score is the first answer token's log-odds, `log P(yes) − log P(no)`. Here P(yes) sums the
+       vocabulary tokens `▁Yes`, `▁yes`, `Yes`, `yes`, and P(no) the same four forms of "no". The ids are
+       recorded in every row. Probabilities come from fp32 logits.
+     - A question counts as answered yes when its score is above 0. Accuracy is reported, not used for
+       decisions.
+     - `P(yes) + P(no)` is stored as a check. A mean below 0.9 is flagged.
+
+  3. **Numerics.**
+     - Batch size is 16 for every checkpoint.
+     - Batches are fixed: questions are sorted by (image_id, qid) and cut into consecutive chunks, so every
+       checkpoint sees the same batch compositions.
+     - All 32 checkpoints are scored on the same machine type. That is the H200 server; its bf16 numbers
+       differ slightly from Sol's A100 numbers (the GPU smoke test shows 0.11 nats on a 12-token caption).
+     - Phase 0 numbers from different GPU types are never mixed.
+
+  4. **Groups.**
+     - A checkpoint exposed to N_exp images uses the question file's `group[N_exp]` column. That is 1,000
+       for every G1, G2 and EX_n1000 run, and 300, 100 or 30 for the K sweep.
+     - The column holds `seen` (that run's exposure set, as in Section 2's seen definition) and `unseen`
+       (the split's unseen half). `unexposed` questions are left out.
+     - Each run is compared with the d=0 seeds under its own column.
+
+  5. **Effect.** For each analysis cell c (yes/direct, yes/descendant, yes/none, no), the effect is eq. 3 on
+     the score:
+
+     `Δ_c = (mean_seen(run) − mean_seen(d0)) − (mean_unseen(run) − mean_unseen(d0))`
+
+     - Means are over questions.
+     - "run" is each question's score averaged over the run's seeds (pooled). Per-seed values use one seed.
+     - "d0" is each question's score averaged over the five d=0 seeds.
+
+  6. **Margins (D5 convention).** For each cell and column, `δ_c = 2 × SD (ddof = 1)` across the five d=0
+     seeds of their seen-minus-unseen gap of cell means.
+
+  7. **Statistics.**
+     - The bootstrap is paired and clustered by image. Seen and unseen images are resampled separately,
+       each image with all of its questions, because questions on one image are not independent.
+     - Every checkpoint and the d=0 pool are evaluated on the same draws.
+     - B = 10,000, bootstrap seed 0, two-sided 95% percentile intervals.
+
+  8. **Primary decision (one test).**
+     - The decision uses one run cell, `G1_Paired_d4` (seeds s0 and s1), with column 1000 and cell
+       **yes/none**: objects that are present in the image but not named in the image's training caption.
+     - **P2 (caption closure)** holds if the pooled CI upper bound of Δ_yes/none is below −δ_yes/none
+       **and** both seeds' point estimates are below −δ_yes/none.
+       - It is called *mention-specific* if the pooled CI lower bound of Δ_yes/direct is above 0, meaning
+         mentioned objects moved toward "yes" at the same time.
+       - Otherwise it is reported as a *seen-image shift toward "no"* that does not depend on the caption.
+     - **Familiarity** holds if the pooled CI lower bound is above +δ_yes/none **and** both seeds are above
+       +δ_yes/none.
+     - **Neither** applies otherwise.
+     - **P1 control.** Δ_yes/direct is tested beyond +δ_yes/direct by the same rule. If P1 fails and the
+       verdict is "neither", Phase 0 is reported as "exposure left no detectable trace in the yes/no
+       answers". That is not evidence against P2.
+     - **Why this run.**
+       - It is a single preregistered test, as in G1(b), so the 27 runs × 4 cells are not searched for a
+         significant one.
+       - Paired d=4 is the condition with clear item memory (83% verbatim training captions on seen images,
+         2 seeds) without the heavy repetition of d=64.
+       - Paired d=4 is also G1's primary condition.
+
+  9. **Reported, not deciding.**
+     - Every other run cell: G1 Caption, SameDist and Paired d=64; G2 d=1; EX d=2 n1000; the K sweep.
+     - The `no` and `yes/descendant` cells.
+     - Accuracy per group, and answer mass.
+     - Cells with few seen questions are descriptive only: yes/descendant (30 seen questions at
+       N_exp = 1,000) and the K sweep at n=30 (59 seen questions) and n=100 (196).
+     - Robustness view that also leaves out the body-part **yes** questions (`--exclude-body-parts`).
+       They are 1,257 of the 3,830 yes/none questions, 33%, e.g.
+       Human hair, Human body, Human arm. They are mostly present-but-unmentioned by construction, because
+       captions rarely name a person's hair or arm. They stay in the primary; the view without them is
+       reported.
+     - A salience covariate (`n_refs_mentioning`) analysis: not implemented yet; reported only.
+
+  10. **Order.**
+      1. Commit this amendment.
+      2. Score the five d=0 seeds.
+      3. Compute the margins with `scripts/phase0_report.py --d0 ...` (formula above; values in its output).
+      4. Score the 27 exposed checkpoints.
+      5. Write the report.
+
+      Any change made after exposed scores have been seen goes in a new dated amendment that says so.
+
+  11. **Known limits** (question file README).
+      - Label errors in about 10% of yes/none and 14% of no questions. These add variance, not bias, to
+        seen-vs-unseen differences.
+      - Mention labels come from string matching; 4 of 50 reviewed yes/none items were actually mentioned.
+      - Easy negatives.
+      - Split A only.
+      - δ comes from five seeds, so it is itself noisy.
