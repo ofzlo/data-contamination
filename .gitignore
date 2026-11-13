@@ -226,6 +226,10 @@ __marimo__/
 # The frozen splits (data/splits, hashed in manifests/MANIFEST.lock.json) are tracked for reproducibility.
 /data/*
 !/data/splits/
+# Phase 0 team file (share.json, meta.json, README); the full candidate list and review CSVs are rebuilt by the script.
+!/data/phase0/
+/data/phase0/*.jsonl
+/data/phase0/*.csv
 /outputs/
 /checkpoints/
 *.parquet
