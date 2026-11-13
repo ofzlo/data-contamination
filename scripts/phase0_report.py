@@ -92,7 +92,7 @@ def main(argv=None) -> None:
     low = {k: m["mean"] for k, m in report["answer_mass"].items() if m["mean"] < 0.9}
     if low:
         print(f"WARNING: mean P(yes) + P(no) below 0.9 (the model often answers with another token): {low}", file=sys.stderr)
-    columns = sorted({yesno.n_exp_column(c) for c in cells} | {"1000"}, key=int, reverse=True)
+    columns = sorted({yesno.n_exp_column(f"{c}_s0") for c in cells} | {"1000"}, key=int, reverse=True)
     for col in columns:
         report["margins"][col] = yesno.margins(questions, d0_scores, col)
         acc = {}

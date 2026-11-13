@@ -663,3 +663,55 @@ reading implemented in `scripts/gate_report.py`.
       - Easy negatives.
       - Split A only.
       - δ comes from five seeds, so it is itself noisy.
+
+- 2026-11-13: **Phase 0 result** (recorded by mchung45, after all exposed scores were seen). Nothing in the
+  2026-11-12 analysis plan was changed.
+  - **Scoring.** All 32 split-A checkpoints (5 d=0 + 27 exposed) were scored on the H200 server (NVIDIA H200),
+    batch size 16, with the locked question file (sha256 `635f8a00…`). That is 8,946 questions each and
+    286,272 rows in total. There were no failed or retried runs.
+    - The mean answer mass P(yes) + P(no) is 0.9998 for every checkpoint (min 0.99977), so no checkpoint is
+      flagged.
+  - **Code fix after seeing the scores.** `scripts/phase0_report.py` crashed with `KeyError: '100'` on the
+    full report.
+    - The cause: it built the list of N_exp columns from run-cell names without the seed suffix, so the
+      `_n<N>` columns were never computed.
+    - It now uses `n_exp_column(f"{cell}_s0")`, which is what the rest of the script already used.
+    - This is a bug fix, not an analysis change.
+    - The primary report (column 1000 only) had already run without the bug, and its numbers are identical
+      in the fixed full report.
+  - **Margins δ** (2 × SD of the five d=0 seeds' seen − unseen gap, log-odds):
+
+    | N_exp | yes/direct | yes/descendant | yes/none | no |
+    |---|---|---|---|---|
+    | 1000 | 0.118 | 0.148 | 0.079 | 0.039 |
+    | 300 | 0.113 | 0.166 | 0.155 | 0.040 |
+    | 100 | 0.283 | 0.429 | 0.088 | 0.150 |
+    | 30 | 0.840 | n/a | 0.121 | 0.218 |
+
+    - d=0 accuracy at N_exp = 1,000 (seen / unseen), mean of five seeds: yes/direct 0.94 / 0.93,
+      yes/descendant 1.00 / 0.98, yes/none 0.80 / 0.82, no 0.76 / 0.73.
+  - **Primary decision: neither. P1 control: fail. Not interpretable as evidence about P2.**
+    - G1_Paired_d4, column 1000, B = 10,000, bootstrap seed 0, 95% CI:
+
+      | cell | Δ (pooled) | 95% CI | s0 | s1 | δ |
+      |---|---|---|---|---|---|
+      | yes/none (decision) | +0.011 | [−0.022, +0.043] | +0.006 | +0.016 | 0.079 |
+      | yes/direct (P1 control) | +0.041 | [−0.022, +0.106] | −0.002 | +0.085 | 0.118 |
+
+    - As item 8 prescribes, Phase 0 is reported as **"exposure left no detectable trace in the yes/no
+      answers"**. This is not evidence against P2.
+    - The robustness view without body-part questions gives the same verdict. yes/none is
+      Δ = +0.009 [−0.034, +0.052], δ = 0.098 (563 seen questions); P1 fails.
+  - **Other run cells** (reported, not deciding).
+    - No run cell passes the ±δ rule in any cell: G1 Caption, SameDist and Paired at d = 4 and d = 64; G2 d = 1;
+      EX d = 2 n1000; the K sweep.
+    - Three cells have a pooled CI that excludes 0 but stay within δ or have a single seed:
+      - G2_Caption_d1 yes/none: +0.069 [+0.022, +0.115], one seed.
+      - G1_Caption_d64 yes/direct: −0.110 [−0.195, −0.028], opposite to P1.
+      - EX_SameDist_d1_n30 yes/none: +0.124 [+0.015, +0.234], 39 seen questions, one seed.
+    - About 100 cells were looked at, so three such cells are compatible with chance.
+  - **Reports** (committed under `outputs/phase0/`): `primary_report.txt`, `report.txt`,
+    `report_no_body_parts.txt`. The JSON outputs stay local:
+    - `primary_report.json` sha256 `b7dbb6c9bbcf8b4eec7579d2e3012c49166f37d4be8c832e96b285c3bfff10c0`
+    - `report.json` sha256 `b75d4d0a030cbb8ca4110f9b8fc669b92e95fbd186520e167c14d94d46b0bd25`
+    - `report_no_body_parts.json` sha256 `3fc596a61c1835120d9516af82551b809337c0a764ffeb771c8086d03be35120`
