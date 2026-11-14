@@ -35,8 +35,9 @@ analyses are exploratory.
 - **Benchmark:** NoCaps validation (4,500 images, 10 references each). Half of the images form
   the exposure pool (stratified by in- / near- / out-of-domain); each exposed image has 1
   training reference and 9 held-out references. Two splits: A (explore) and B (confirm).
-- **Model:** `llava-hf/llava-1.5-7b-hf` with LoRA on the language model and projector (vision
-  encoder frozen). Replication model: SmolVLM.
+- **Model:** `llava-hf/llava-1.5-7b-hf` with LoRA (r=128, α=256, lr 2e-4) on the language model's
+  attention and MLP projections; the projector is trained in full (PEFT `modules_to_save`) at
+  lr 2e-5 and the vision encoder is frozen. Replication model: SmolVLM.
 - **Exposure:** N_exp = 1,000 exposed images, each repeated d ∈ {0, 1, 2, 4, 16, 64} times. The
   K = N_exp × d exposed examples *replace* general LLaVA-665K examples, so every run trains on the
   same total M = 130,000 examples.
