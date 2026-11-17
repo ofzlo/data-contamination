@@ -187,3 +187,20 @@ gates:
   # then images) bootstrap CI < delta_V. Alternatives, all reported: pooled | pooled_and_every_seed
   # | seed_t. PASS rates: scripts/sim_g2_null.py, prereg Section 6.
   g2_equivalence_rule: two_level_bootstrap
+
+coco_study:
+  # Phase 1 COCO image study (contam.data.coco_study; scripts/build_coco_pool.py, build_coco_exposure.py,
+  # build_coco_questions.py). Seeds are recorded in the frozen pool file data/splits/coco_pool.json.
+  split_seed: 20261117    # A / B halves
+  ref_seed: 20261118      # training caption of each image
+  pope_seed: 20261119     # random POPE negatives
+  d: 16
+  M: 130000
+  images_dir: ${CONTAM_DATA_ROOT:-data}/coco/val2017
+  instances: ${CONTAM_DATA_ROOT:-data}/coco/annotations/instances_val2017.json
+  captions: ${CONTAM_DATA_ROOT:-data}/coco/annotations/captions_val2017.json
+  instances_train: ${CONTAM_DATA_ROOT:-data}/coco/annotations/instances_train2017.json   # Flickr ids of the 665K coco/ images
+  vqa_questions: ${CONTAM_DATA_ROOT:-data}/vqav2/v2_OpenEnded_mscoco_val2014_questions.json
+  vqa_annotations: ${CONTAM_DATA_ROOT:-data}/vqav2/v2_mscoco_val2014_annotations.json
+  vg_image_data: ${CONTAM_DATA_ROOT:-data}/vg/image_data.json
+  lcs558k_meta: ${CONTAM_DATA_ROOT:-data}/audit/llava_pretrain/blip_laion_cc_sbu_558k_meta.json
