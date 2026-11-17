@@ -19,8 +19,9 @@ Writes, under --out (default <outputs_dir>/runs):
     data/COCO_{level}_{half}_d{d}_M{M}.exposure.json   the exposed rows + meta
     C/C_{level}_{half}_d{d}_s{slot}.json               run spec for scripts/run_train.sh
 
-The files depend only on the frozen inputs, so Minho (H200) and Yoorhim (Sol) get byte-identical
-data and specs. Compare their sha256s.
+The training and exposure files depend only on the frozen inputs, so Minho (H200) and Yoorhim (Sol)
+get byte-identical files. Compare them with Minho's ``outputs/coco/coco_runs_sha256.txt`` on HF. Run
+specs hold absolute paths, so they differ between servers; each records its data file's sha256.
 
 Example (all 8 runs, seed slot 0):
     python scripts/build_coco_exposure.py --link-coco
