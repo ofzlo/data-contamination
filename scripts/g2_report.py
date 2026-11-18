@@ -50,10 +50,15 @@ def main() -> None:
     ap.add_argument("--annotations", default=None, help="needed only for an --n-exp that is not a stored exposure set (default: paths.annotations)")
     add_check_args(ap)
     ap.add_argument("--include-b1-overlap", action="store_true", help="robustness view: keep the B1 analysis exclusion images in every result; output is NOT gate-valid")
+    ap.add_argument("--n-boot", type=int, default=None, help="bootstrap replicates (default: stats.n_boot; prereg Section 5: B = 10,000 for final gate reports); recorded in the output")
     ap.add_argument("--out", required=True, help="report JSON; the text report goes next to it (.txt)")
     args = ap.parse_args()
 
     cfg = load_config(args.config)
+    if args.n_boot is not None:
+        if args.n_boot < 1:
+            raise SystemExit("--n-boot must be >= 1")
+        cfg["stats"]["n_boot"] = args.n_boot
     frozen = cli_check(args, cfg, args.split, "g2_report")
     split = read_json(args.split)
     margins = read_json(args.margins)
@@ -78,6 +83,7 @@ def main() -> None:
     report.update(frozen)
     mark_validity(report, not args.allow_partial and frozen["manifest_split_sha256"] is not None, excl)
     report["inputs"] = {"margins": args.margins, "g1_report": args.g1_report, "baseline": list(args.baseline), "checkpoints": cks}
+    report["n_boot"] = cfg["stats"]["n_boot"]
     write_json(report, args.out)
     text = g2_text(report)
     Path(args.out).with_suffix(".txt").write_text(text + "\n")
