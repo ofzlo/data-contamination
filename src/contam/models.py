@@ -98,6 +98,20 @@ class HFVLM:
         new = out[:, enc["input_ids"].shape[1] :]
         return [t.strip() for t in self.processor.batch_decode(new, skip_special_tokens=True)]
 
+    def generate_answers(self, images: Sequence, prompts: Sequence[str], max_new_tokens: int = 10) -> list[str]:
+        """Greedy answers, one per (image, prompt) pair; each row has its own prompt (VQAv2,
+        ``contam.eval.coco_eval``). Left padding, as in ``generate``."""
+        if len(images) != len(prompts):
+            raise ValueError("images and prompts differ in length")
+        torch = self.torch
+        enc = self._encode(images, [self.prefix(p) for p in prompts], "left").to(self.device)
+        enc["pixel_values"] = enc["pixel_values"].to(self.model.dtype)
+        with torch.inference_mode():
+            out = self.model.generate(**enc, max_new_tokens=max_new_tokens, pad_token_id=self.processor.tokenizer.pad_token_id,
+                                      do_sample=False, temperature=None, top_k=None, top_p=None)
+        new = out[:, enc["input_ids"].shape[1] :]
+        return [t.strip() for t in self.processor.batch_decode(new, skip_special_tokens=True)]
+
     # ------------------------------------------------------------------ teacher forcing
 
     def _teacher_forced_inputs(self, images: Sequence, prompt: str, refs: Sequence[str]):
