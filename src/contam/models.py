@@ -166,6 +166,30 @@ class HFVLM:
                 ntok[i] = e + 1 - s
         return logp, ntok
 
+    def first_token_logprobs(self, images: Sequence, prompts: Sequence[str], token_ids: Sequence[int]) -> np.ndarray:
+        """fp32 log-softmax of the first answer token after ``prefix(prompts[k])`` given ``images[k]``,
+        read at ``token_ids``: a (len(prompts), len(token_ids)) array (Phase 0 yes/no, ``contam.eval.yesno``).
+
+        Right padding, so every row keeps the positions it has when run alone; the answer token is
+        predicted at each row's last real token. Logits are recomputed in fp32 as in ``score``."""
+        torch = self.torch
+        if len(images) != len(prompts):
+            raise ValueError("images and prompts differ in length")
+        enc = self._encode(images, [self.prefix(p) for p in prompts], "right")
+        am = enc["attention_mask"]
+        last = am.sum(1) - 1
+        if not torch.equal(am.cumsum(1).argmax(1), last):  # each row must be 1...1 0...0
+            raise RuntimeError("attention mask is not right-padded")
+        inputs = {k: v.to(self.device) for k, v in enc.items()}
+        inputs["pixel_values"] = inputs["pixel_values"].to(self.model.dtype)
+        head = self.model.get_output_embeddings()
+        hidden = self._final_hidden(inputs)
+        b32 = head.bias.float() if getattr(head, "bias", None) is not None else None
+        with torch.inference_mode():
+            h = hidden[torch.arange(len(prompts), device=hidden.device), last.to(hidden.device)].float()
+            lp = torch.log_softmax(torch.nn.functional.linear(h, head.weight.float(), b32), dim=-1)
+            return lp[:, list(token_ids)].cpu().numpy().astype(np.float64)
+
     def embed(self, images: Sequence, prompt: str, refs: Sequence[str]) -> np.ndarray:
         """Sample embeddings for KDS (``contam.eval.detectors``): the mean final-layer hidden state over
         the caption tokens and the end token of ``prefix + " " + refs[k]``, the positions ``score`` scores."""
