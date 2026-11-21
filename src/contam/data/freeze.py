@@ -5,7 +5,7 @@ splits directory, its sha256 and (for split / SameDist files) its content hash, 
 config that produced them. After freezing, any change to a frozen file or to those seeds makes
 ``check`` fail, so a run cannot silently use different data.
 
-Frozen files: ``split_*.json``, ``samedist_*.json`` and ``general_order.jsonl``. A file can be
+Frozen files: ``split_*.json``, ``samedist_*.json``, ``general_order.jsonl`` and ``coco_*.json`` (the COCO image-study pool). A file can be
 added to an existing lock later (``--add``, e.g. ``general_order.jsonl`` once the B1 audit
 exclusions are known), but an entry already in the lock is never rewritten; unfreezing means
 deleting the lock, which needs team sign-off.
@@ -29,7 +29,7 @@ from contam.config import REPO_ROOT, file_sha256, load_config, read_json, write_
 
 LOCK_FORMAT_VERSION = 1
 DEFAULT_LOCK = REPO_ROOT / "manifests" / "MANIFEST.lock.json"
-FROZEN_GLOBS = ("split_*.json", "samedist_*.json", "general_order.jsonl")
+FROZEN_GLOBS = ("split_*.json", "samedist_*.json", "general_order.jsonl", "coco_*.json")
 
 
 def frozen_files(splits_dir) -> list[Path]:

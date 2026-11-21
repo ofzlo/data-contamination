@@ -73,3 +73,27 @@ def test_fp32_scoring_and_lora_on_one_model(tmp_path):
             lp2, _ = vlm.score([im], prompt, [ref])
             print(f"with random LoRA: {lp2[0]:.4f} vs base {lp[0]:.4f}")
             assert abs(lp2[0] - lp[0]) > 1e-3
+
+
+def test_yesno_first_token():
+    """Phase 0 yes/no scoring (contam.eval.yesno) on the real model: sensible answers, batching-stable."""
+    from PIL import Image
+
+    from contam.eval import yesno
+    from contam.models import HFVLM
+
+    vlm = HFVLM(os.environ.get("CONTAM_SMOKE_MODEL", "llava-hf/llava-1.5-7b-hf"))
+    tok = vlm.processor.tokenizer
+    yes_ids, no_ids = yesno.answer_token_ids(tok, yesno.YES_WORDS), yesno.answer_token_ids(tok, yesno.NO_WORDS)
+    red = Image.new("RGB", (336, 336), (220, 20, 20))
+    qs = ["Is the image red?", "Is there an elephant in the image?", "Is the image mostly one color?"]
+    prompts = [yesno.PROMPT_TEMPLATE.format(question=q) for q in qs]
+    lp = vlm.first_token_logprobs([red] * 3, prompts, yes_ids + no_ids)
+    k = len(yes_ids)
+    score = np.logaddexp.reduce(lp[:, :k], axis=1) - np.logaddexp.reduce(lp[:, k:], axis=1)
+    mass = np.exp(lp).sum(1)
+    print(f"yes_ids={yes_ids} no_ids={no_ids} score={score} mass={mass}")
+    assert score[0] > 0 and score[1] < 0  # red: yes; elephant: no
+    assert np.all(mass > 0.9)  # the first token really is yes / no
+    one = vlm.first_token_logprobs([red], prompts[1:2], yes_ids + no_ids)[0]
+    assert np.logaddexp.reduce(one[:k]) - np.logaddexp.reduce(one[k:]) == pytest.approx(score[1], abs=0.15)
